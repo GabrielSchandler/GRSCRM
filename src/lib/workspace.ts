@@ -136,7 +136,13 @@ const legalPrefixes = ["/juridico"];
 
 const commercialPrefixes = ["/comercial", "/calculos", "/leads"];
 
-const sharedOperationalPrefixes = ["/clientes", "/pre-vendas", "/documentos"];
+// "/atendimento" entrou aqui em 29/09/2026 (port do chat do newseccrm) — sem isso, o
+// bloco de redirecionamento de "seller" (mais abaixo, no middleware) expulsaria qualquer
+// vendedor de volta pra home dele assim que tentasse abrir /atendimento, porque a rota nao
+// bate em nenhum dos prefixos de area (comercial/juridico/etc) nem estava nesta lista —
+// achado revisando o codigo antes de portar, nao em teoria: quase todo consultor real da
+// GRS tem role "seller".
+const sharedOperationalPrefixes = ["/clientes", "/pre-vendas", "/documentos", "/atendimento"];
 
 export function classifyWorkspacePath(pathname: string): WorkspaceView | null {
   if (financePrefixes.some((prefix) => pathname.startsWith(prefix))) {

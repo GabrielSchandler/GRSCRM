@@ -1,8 +1,13 @@
 import Link from "next/link";
 import { ThemeScript } from "@/components/newsec/theme-script";
 import { NewSecSidebarNav } from "@/components/newsec/sidebar-nav";
+import { getCurrentUserContext } from "@/lib/auth/current-user";
 
-export default function NewSecLayout({ children }: { children: React.ReactNode }) {
+export default async function NewSecLayout({ children }: { children: React.ReactNode }) {
+  // Só pra decidir o que a sidebar mostra (link "Atendimento" visível ou não) — a trava
+  // de verdade é no server component da própria página (redirect se não for master).
+  const { isPlatformOwner } = await getCurrentUserContext();
+
   return (
     <div
       id="ns-shell-root"
@@ -23,7 +28,7 @@ export default function NewSecLayout({ children }: { children: React.ReactNode }
           <span className="text-sm font-semibold text-[var(--ns-text)]">NewSec</span>
         </div>
         <div className="flex-1 overflow-y-auto py-2">
-          <NewSecSidebarNav />
+          <NewSecSidebarNav isPlatformOwner={Boolean(isPlatformOwner)} />
         </div>
         <div className="border-t border-[var(--ns-border)] px-3 py-3 text-[11px] text-[var(--ns-text-secondary)]">
           <Link href="/dashboard" className="underline decoration-dotted hover:text-[var(--ns-text)]">

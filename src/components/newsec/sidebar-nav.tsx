@@ -44,21 +44,27 @@ const ITEMS: NavItem[] = [
   { href: "/configuracoes", label: "Configurações", icon: Settings, disponivel: false },
 ];
 
-export function NewSecSidebarNav() {
+export function NewSecSidebarNav({ isPlatformOwner }: { isPlatformOwner: boolean }) {
   const pathname = usePathname();
 
   return (
     <nav aria-label="Navegação principal" className="flex flex-col gap-0.5 px-2">
       {ITEMS.map((item) => {
+        // "Atendimento" só é clicável pro master por enquanto (decisão do Gabriel, 29/09/2026:
+        // ele confere sozinho, com o histórico real já importado, antes de abrir pra equipe).
+        // A trava de verdade é no server component da página — isto aqui só evita oferecer um
+        // link que ia bater no redirect.
+        const disponivelAgora = item.href === "/atendimento" ? item.disponivel && isPlatformOwner : item.disponivel;
         const isActive = !item.externo && pathname === item.href;
         const Icon = item.icon;
 
-        if (!item.disponivel) {
+        if (!disponivelAgora) {
+          const motivo = item.href === "/atendimento" ? "em teste com o master, ainda não liberado pra equipe" : "ainda não migrado pro visual novo";
           return (
             <div
               key={item.href}
               aria-disabled="true"
-              title={`${item.label} — ainda não migrado pro visual novo`}
+              title={`${item.label} — ${motivo}`}
               className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-[var(--ns-text-secondary)] opacity-50"
             >
               <Icon aria-hidden="true" className="h-4 w-4 shrink-0" />

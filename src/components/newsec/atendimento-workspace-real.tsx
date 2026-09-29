@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle, Bot, Check, FileText, Phone, RefreshCw, Send, StickyNote, UserPlus, Users2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/browser";
 import type { ConversaEstado, ConversationStatus, Message } from "@/types/atendimento";
@@ -106,6 +106,19 @@ function formatarTelefone(e164: string | null): string | null {
   return `+${digitos}`;
 }
 
+/**
+ * Hora se for hoje; senão a data (e a hora, se `comHora`). Antes a lista mostrava só "14:23"
+ * mesmo pra conversa de meses atrás — com o histórico do Totalk importado, parecia que tudo
+ * era de hoje e não dava pra saber de quando era cada conversa/mensagem.
+ */
+function horaOuData(iso: string, comHora = false) {
+  const data = new Date(iso);
+  const hora = data.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+  if (data.toDateString() === new Date().toDateString()) return hora;
+  const dia = data.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "2-digit" });
+  return comHora ? `${dia} ${hora}` : dia;
+}
+
 function formatarDataHora(iso: string | null) {
   if (!iso) return "—";
   return new Date(iso).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
@@ -145,6 +158,14 @@ export function AtendimentoWorkspaceReal({
   const [usuariosEmpresa, setUsuariosEmpresa] = useState<UsuarioEmpresa[]>([]);
   const [transferenciaAberta, setTransferenciaAberta] = useState(false);
 
+  // Qual conversa a tela quer mostrar AGORA. Toda resposta de mensagens que chegar de uma
+  // conversa diferente desta é descartada — sem isso, clicar rápido em duas conversas fazia
+  // a resposta mais lenta chegar por último e pintar as mensagens de uma pessoa embaixo do
+  // nome/telefone de outra (bug real relatado pelo Gabriel em produção, 29/09/2026).
+  // Mesmo princípio pra lista (trocar de aba rápido).
+  const conversaPedidaRef = useRef<string | null>(null);
+  const pedidoListaRef = useRef(0);
+
   const SELECT_CONVERSAS =
     "id, status, created_at, last_activity_at, last_message_preview, unread_count, assigned_user_profile_id, client_id, team_id, external_id, " +
     "contact:contacts(id, display_name, contact_phone_numbers(phone_e164, is_primary)), channel:channels(id, name), team:teams(id, name), " +
@@ -176,6 +197,7 @@ export function AtendimentoWorkspaceReal({
   }
 
   const carregarConversas = useCallback(async () => {
+    const pedido = ++pedidoListaRef.current;
     setCarregandoLista(true);
     setErroLista(null);
 
@@ -184,6 +206,9 @@ export function AtendimentoWorkspaceReal({
       .limit(50);
 
     const { data, error } = await query;
+
+    // Mesma proteção das mensagens: se o usuário já trocou de aba, esta resposta é velha.
+    if (pedido !== pedidoListaRef.current) return;
 
     if (error) {
       setErroLista(`Não foi possível carregar as conversas: ${error.message}`);
@@ -214,20 +239,31 @@ export function AtendimentoWorkspaceReal({
   }, [supabase, userProfileId, companyId, podeVerIA]);
 
   const carregarMensagens = useCallback(
-    async (conversationId: string) => {
+    async (conversationId: string, { limpar = true }: { limpar?: boolean } = {}) => {
+      conversaPedidaRef.current = conversationId;
       setErroMensagens(null);
+      // Troca de conversa: esvazia na hora, pra nunca mostrar mensagens da conversa anterior
+      // com o cabeçalho da nova enquanto a resposta não chega. Recarregar a MESMA conversa
+      // (depois de enviar/assumir) não esvazia, pra não piscar a tela.
+      if (limpar) setMensagens(null);
+
+      // As 200 MAIS RECENTES (desc + inverte), não as 200 mais antigas: em conversa longa a
+      // tela mostrava o começo da conversa e nunca chegava nas últimas mensagens — que são
+      // justamente as da prévia na lista.
       const { data, error } = await supabase
         .from("messages")
         .select("*, author:user_profiles!messages_author_user_profile_id_fkey(id, full_name)")
         .eq("conversation_id", conversationId)
-        .order("created_at", { ascending: true })
+        .order("created_at", { ascending: false })
         .limit(200);
+
+      if (conversaPedidaRef.current !== conversationId) return;
 
       if (error) {
         setErroMensagens(`Não foi possível carregar as mensagens: ${error.message}`);
         setMensagens(null);
       } else {
-        setMensagens((data ?? []) as unknown as MensagemComAutor[]);
+        setMensagens(((data ?? []) as unknown as MensagemComAutor[]).reverse());
       }
     },
     [supabase],
@@ -318,7 +354,7 @@ export function AtendimentoWorkspaceReal({
 
     if (resultado.ok) {
       setRascunhos((atual) => ({ ...atual, [selecionadaId]: "" }));
-      await carregarMensagens(selecionadaId);
+      await carregarMensagens(selecionadaId, { limpar: false });
       await carregarConversas();
       await carregarContagensAbas();
     }
@@ -356,7 +392,7 @@ export function AtendimentoWorkspaceReal({
     if (!selecionadaId) return;
     const resultado = await reenviarMensagemFalhadaAction(messageId, selecionadaId);
     mostrarAviso(resultado.message);
-    await carregarMensagens(selecionadaId);
+    await carregarMensagens(selecionadaId, { limpar: false });
   }
 
   return (
@@ -447,7 +483,7 @@ export function AtendimentoWorkspaceReal({
                     {conversa.contact?.display_name ?? "Contato sem nome"}
                   </span>
                   <span className="shrink-0 text-xs text-[var(--ns-text-secondary)]">
-                    {new Date(conversa.last_activity_at).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
+                    {horaOuData(conversa.last_activity_at)}
                   </span>
                 </div>
                 <span className="truncate text-xs text-[var(--ns-text-secondary)]">{conversa.last_message_preview ?? "—"}</span>
@@ -607,7 +643,7 @@ export function AtendimentoWorkspaceReal({
                         {!doCliente && (mensagem.status === "enviada" || mensagem.status === "entregue" || mensagem.status === "lida") && (
                           <Check aria-hidden="true" className="h-3 w-3" />
                         )}
-                        <span>{new Date(mensagem.created_at).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}</span>
+                        <span>{horaOuData(mensagem.created_at, true)}</span>
                       </div>
                     </div>
                   </div>

@@ -10,9 +10,14 @@ import {
   criarNotaInternaAction,
   enviarMensagemAction,
   reabrirConversaAction,
+  obterLinksAnexosAction,
   reenviarMensagemFalhadaAction,
   transferirConversaAction,
+  type AnexoParaExibir,
 } from "@/app/(newsec)/atendimento/actions";
+
+const TIPOS_COM_ARQUIVO = new Set(["audio", "imagem", "documento", "video"]);
+const ROTULO_TIPO: Record<string, string> = { audio: "Áudio", imagem: "Imagem", documento: "Documento", video: "Vídeo" };
 import { EstadoBadge } from "./estado-badge";
 
 type TelefoneContato = { phone_e164: string; is_primary: boolean };
@@ -156,6 +161,7 @@ export function AtendimentoWorkspaceReal({
 
   const [selecionadaId, setSelecionadaId] = useState<string | null>(null);
   const [mensagens, setMensagens] = useState<MensagemComAutor[] | null>(null);
+  const [anexosPorMensagem, setAnexosPorMensagem] = useState<Record<string, AnexoParaExibir[]>>({});
   const [erroMensagens, setErroMensagens] = useState<string | null>(null);
 
   const [rascunhos, setRascunhos] = useState<Record<string, string>>({});
@@ -283,7 +289,10 @@ export function AtendimentoWorkspaceReal({
       // Troca de conversa: esvazia na hora, pra nunca mostrar mensagens da conversa anterior
       // com o cabeçalho da nova enquanto a resposta não chega. Recarregar a MESMA conversa
       // (depois de enviar/assumir) não esvazia, pra não piscar a tela.
-      if (limpar) setMensagens(null);
+      if (limpar) {
+        setMensagens(null);
+        setAnexosPorMensagem({});
+      }
 
       // As 200 MAIS RECENTES (desc + inverte), não as 200 mais antigas: em conversa longa a
       // tela mostrava o começo da conversa e nunca chegava nas últimas mensagens — que são
@@ -301,7 +310,17 @@ export function AtendimentoWorkspaceReal({
         setErroMensagens(`Não foi possível carregar as mensagens: ${error.message}`);
         setMensagens(null);
       } else {
-        setMensagens(((data ?? []) as unknown as MensagemComAutor[]).reverse());
+        const lista = ((data ?? []) as unknown as MensagemComAutor[]).reverse();
+        setMensagens(lista);
+        // Arquivos (áudio/imagem/documento/vídeo): links assinados pedidos ao servidor só pras
+        // mensagens de mídia desta conversa. Mesma proteção de corrida das mensagens.
+        const idsMidia = lista.filter((m) => TIPOS_COM_ARQUIVO.has(m.message_type)).map((m) => m.id);
+        if (idsMidia.length > 0) {
+          const links = await obterLinksAnexosAction(idsMidia).catch(() => ({}));
+          if (conversaPedidaRef.current === conversationId) setAnexosPorMensagem(links);
+        } else {
+          setAnexosPorMensagem({});
+        }
       }
     },
     [supabase],
@@ -658,13 +677,17 @@ export function AtendimentoWorkspaceReal({
                         doCliente ? "bg-[var(--ns-surface-hover)] text-[var(--ns-text)]" : "bg-[var(--ns-primary)] text-[var(--ns-primary-foreground)]"
                       }`}
                     >
-                      {mensagem.message_type === "documento" ? (
-                        <div className="flex items-center gap-2">
-                          <FileText aria-hidden="true" className="h-4 w-4 shrink-0" />
-                          <span className="underline">{corpoSemAssinaturaAntiga(mensagem) ?? "documento"}</span>
-                        </div>
-                      ) : (
-                        <p>{corpoSemAssinaturaAntiga(mensagem)}</p>
+                      {TIPOS_COM_ARQUIVO.has(mensagem.message_type) && (
+                        <ArquivoDaMensagem
+                          tipo={mensagem.message_type}
+                          anexos={anexosPorMensagem[mensagem.id] ?? []}
+                          doCliente={doCliente}
+                        />
+                      )}
+                      {corpoSemAssinaturaAntiga(mensagem) && (
+                        <p className={`whitespace-pre-wrap ${TIPOS_COM_ARQUIVO.has(mensagem.message_type) ? "mt-1" : ""}`}>
+                          {corpoSemAssinaturaAntiga(mensagem)}
+                        </p>
                       )}
                       <div
                         className={`mt-1 flex items-center justify-end gap-1.5 text-[10px] ${
@@ -835,6 +858,50 @@ export function AtendimentoWorkspaceReal({
           </>
         )}
       </aside>
+    </div>
+  );
+}
+
+/**
+ * Arquivo de uma mensagem. Sem arquivo ainda (a cópia do Totalk pro Storage roda em paralelo à
+ * importação, ver copiar-anexos.mjs), mostra que é um áudio/imagem/etc. e que ainda está chegando —
+ * nunca um balão vazio, que parecia mensagem perdida.
+ */
+function ArquivoDaMensagem({ tipo, anexos, doCliente }: { tipo: string; anexos: AnexoParaExibir[]; doCliente: boolean }) {
+  if (anexos.length === 0) {
+    return (
+      <p className={`flex items-center gap-1.5 text-xs italic ${doCliente ? "text-[var(--ns-text-secondary)]" : "opacity-80"}`}>
+        <FileText aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />
+        {ROTULO_TIPO[tipo] ?? "Arquivo"} — arquivo ainda sendo copiado do Totalk
+      </p>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      {anexos.map((anexo) => {
+        const mime = anexo.contentType ?? "";
+        if (tipo === "audio" || mime.startsWith("audio/")) {
+          return <audio key={anexo.url} controls preload="none" src={anexo.url} className="h-10 w-64 max-w-full" />;
+        }
+        if (tipo === "imagem" || mime.startsWith("image/")) {
+          return (
+            <a key={anexo.url} href={anexo.url} target="_blank" rel="noreferrer">
+              {/* eslint-disable-next-line @next/next/no-img-element -- link assinado temporário do Storage, não passa pelo otimizador de imagem */}
+              <img src={anexo.url} alt={anexo.nome ?? "Imagem"} className="max-h-64 max-w-full rounded-lg" loading="lazy" />
+            </a>
+          );
+        }
+        if (tipo === "video" || mime.startsWith("video/")) {
+          return <video key={anexo.url} controls preload="none" src={anexo.url} className="max-h-64 max-w-full rounded-lg" />;
+        }
+        return (
+          <a key={anexo.url} href={anexo.url} target="_blank" rel="noreferrer" className="flex items-center gap-2 underline">
+            <FileText aria-hidden="true" className="h-4 w-4 shrink-0" />
+            <span className="truncate">{anexo.nome ?? "Documento"}</span>
+          </a>
+        );
+      })}
     </div>
   );
 }

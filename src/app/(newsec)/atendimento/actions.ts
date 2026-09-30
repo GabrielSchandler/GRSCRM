@@ -2,8 +2,47 @@
 
 import { revalidatePath } from "next/cache";
 import { getCurrentUserContext } from "@/lib/auth/current-user";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 export type AtendimentoActionState = { ok: boolean; message: string };
+
+export type AnexoParaExibir = { url: string; contentType: string | null; nome: string | null };
+
+/**
+ * Links temporários (1h) pros arquivos (áudio/imagem/documento/vídeo) de mensagens.
+ *
+ * O arquivo fica no bucket PRIVADO "atendimento-anexos". A leitura de message_attachments é
+ * feita com a sessão do PRÓPRIO usuário — a RLS (user_can_access_conversation) já descarta o
+ * que ele não pode ver. Só depois disso a chave de serviço assina os links, e só dos caminhos
+ * que a RLS liberou. Assim não precisa abrir policy nenhuma no Storage.
+ */
+export async function obterLinksAnexosAction(messageIds: string[]): Promise<Record<string, AnexoParaExibir[]>> {
+  if (messageIds.length === 0) return {};
+  const { supabase } = await getCurrentUserContext();
+
+  const { data: anexos, error } = await supabase
+    .from("message_attachments")
+    .select("message_id, storage_path, content_type, file_name")
+    .in("message_id", messageIds.slice(0, 300));
+  if (error || !anexos || anexos.length === 0) return {};
+
+  const admin = createAdminClient();
+  const { data: assinados } = await admin.storage
+    .from("atendimento-anexos")
+    .createSignedUrls(
+      anexos.map((a) => a.storage_path),
+      60 * 60,
+    );
+  const urlPorCaminho = new Map((assinados ?? []).map((s) => [s.path, s.signedUrl]));
+
+  const resultado: Record<string, AnexoParaExibir[]> = {};
+  for (const anexo of anexos) {
+    const url = urlPorCaminho.get(anexo.storage_path);
+    if (!url) continue;
+    (resultado[anexo.message_id] ??= []).push({ url, contentType: anexo.content_type, nome: anexo.file_name });
+  }
+  return resultado;
+}
 
 /**
  * Envia mensagem de saída: grava a mensagem (status "pendente") e enfileira

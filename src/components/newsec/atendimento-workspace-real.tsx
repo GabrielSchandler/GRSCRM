@@ -96,6 +96,12 @@ function iniciaisDe(nome: string | null) {
 }
 
 /** Telefone principal do contato (ou o primeiro, se nenhum estiver marcado como principal). */
+// Conversa vinda do Totalk (tem external_id) sem responsável = o atendente de lá não tem login no CRM.
+function nomeResponsavel(conversa: ConversaLista, semResponsavel: string): string {
+  if (conversa.assigned_user_profile?.full_name) return conversa.assigned_user_profile.full_name;
+  return conversa.external_id ? "Atendente não localizado" : semResponsavel;
+}
+
 function telefoneDoContato(contact: ConversaLista["contact"]): string | null {
   const telefones = contact?.contact_phone_numbers ?? [];
   return telefones.find((t) => t.is_primary)?.phone_e164 ?? telefones[0]?.phone_e164 ?? null;
@@ -584,7 +590,7 @@ export function AtendimentoWorkspaceReal({
                     {formatarTelefone(telefoneDoContato(conversaSelecionada.contact)) ?? "Sem telefone cadastrado"}
                     {" · "}
                     {conversaSelecionada.channel?.name ?? "Canal"} ·{" "}
-                    {conversaSelecionada.assigned_user_profile?.full_name ?? "sem responsável"}
+                    {nomeResponsavel(conversaSelecionada, "sem responsável")}
                   </p>
                 </div>
               </div>
@@ -824,7 +830,7 @@ export function AtendimentoWorkspaceReal({
               <dl className="space-y-1.5">
                 <LinhaFicha rotulo="Status" valor={<EstadoBadge estado={STATUS_PARA_BADGE[conversaSelecionada.status]} />} />
                 <LinhaFicha rotulo="Equipe" valor={conversaSelecionada.team?.name ?? "Sem equipe"} />
-                <LinhaFicha rotulo="Responsável" valor={conversaSelecionada.assigned_user_profile?.full_name ?? "Sem responsável"} />
+                <LinhaFicha rotulo="Responsável" valor={nomeResponsavel(conversaSelecionada, "Sem responsável")} />
                 <LinhaFicha rotulo="Canal" valor={conversaSelecionada.channel?.name ?? "—"} />
                 <LinhaFicha rotulo="Iniciada em" valor={formatarDataHora(conversaSelecionada.created_at)} />
                 <LinhaFicha rotulo="Última atividade" valor={formatarDataHora(conversaSelecionada.last_activity_at)} />

@@ -56,6 +56,21 @@ export async function obterLinksAnexosAction(messageIds: string[]): Promise<Reco
  * reenviar com a MESMA chave (duplo clique, retry de rede) não duplica, a
  * própria função trata isso como sucesso idempotente.
  */
+const AVISO_SEM_WHATSAPP =
+  "Envio bloqueado: esta conversa veio do Totalk e o WhatsApp ainda não está conectado ao CRM. Responda pelo Totalk por enquanto (nota interna funciona).";
+
+/**
+ * Canal importado do Totalk (provider="totalk") ainda não tem WhatsApp ligado no CRM. Sem esta
+ * trava, a mensagem ficaria na fila (outbound_jobs) e poderia sair de verdade pro cliente no dia
+ * em que o número fosse conectado — dias depois, fora de contexto. Liberação da tela pra equipe
+ * testar (30/09/2026) tornou isso provável.
+ */
+async function canalSemWhatsApp(supabase: Awaited<ReturnType<typeof getCurrentUserContext>>["supabase"], conversationId: string) {
+  const { data } = await supabase.from("conversations").select("channel:channels(provider)").eq("id", conversationId).maybeSingle();
+  const canal = (data as { channel: { provider: string } | null } | null)?.channel;
+  return !canal || canal.provider === "totalk";
+}
+
 export async function enviarMensagemAction(
   conversationId: string,
   texto: string,
@@ -65,6 +80,7 @@ export async function enviarMensagemAction(
   if (!textoLimpo) return { ok: false, message: "Mensagem vazia." };
 
   const { supabase, userProfileId, companyId } = await getCurrentUserContext();
+  if (await canalSemWhatsApp(supabase, conversationId)) return { ok: false, message: AVISO_SEM_WHATSAPP };
 
   const { data, error } = await supabase.rpc("enviar_mensagem_com_job", {
     p_conversation_id: conversationId,
@@ -212,6 +228,7 @@ export async function concluirConversaAction(conversationId: string): Promise<At
  */
 export async function reenviarMensagemFalhadaAction(messageId: string, conversationId: string): Promise<AtendimentoActionState> {
   const { supabase } = await getCurrentUserContext();
+  if (await canalSemWhatsApp(supabase, conversationId)) return { ok: false, message: AVISO_SEM_WHATSAPP };
 
   const { data, error } = await supabase.rpc("reenviar_mensagem_falhada", {
     p_message_id: messageId,

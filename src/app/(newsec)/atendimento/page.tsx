@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { redirect } from "next/navigation";
 import { TopBar } from "@/components/newsec/top-bar";
 import { AtendimentoWorkspaceReal } from "@/components/newsec/atendimento-workspace-real";
 import { getCurrentUserContext } from "@/lib/auth/current-user";
@@ -11,14 +10,9 @@ export const metadata: Metadata = {
 export default async function AtendimentoPage() {
   const { userProfileId, companyId, role, isPlatformOwner, activeCompany } = await getCurrentUserContext();
 
-  // Acesso restrito ao master (is_platform_owner) por decisão do Gabriel (29/09/2026):
-  // ele confere a tela primeiro, sozinho, com o histórico real do Totalk já importado;
-  // só depois libera pro resto da equipe. Trava no servidor, não só link escondido no
-  // menu — digitar /atendimento direto na URL sem ser master também é barrado.
-  // Remover este bloco quando a tela for liberada geral.
-  if (!isPlatformOwner) {
-    redirect("/dashboard");
-  }
+  // Liberada pra todos os logins em 30/09/2026 (Gabriel: equipe testar), mas SEM link no menu do
+  // CRM — só quem recebe o endereço entra. O que cada um vê continua limitado pelo banco (RLS,
+  // user_can_access_conversation): consultor só enxerga as próprias conversas.
 
   const companyName = activeCompany?.trade_name ?? activeCompany?.legal_name ?? "Empresa";
 

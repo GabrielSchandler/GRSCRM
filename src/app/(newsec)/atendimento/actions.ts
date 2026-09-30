@@ -98,6 +98,21 @@ export async function enviarMensagemAction(
   return { ok: true, message: resultado?.ja_existia ? "Mensagem já enviada." : "Mensagem enviada." };
 }
 
+/**
+ * Dono da conversa abriu: zera as não lidas. O filtro por responsável fica na própria query — se
+ * quem chamou não é o dono, não atualiza nada (a regra vale mesmo chamando a action direto).
+ */
+export async function marcarConversaComoLidaAction(conversationId: string): Promise<AtendimentoActionState> {
+  const { supabase, userProfileId } = await getCurrentUserContext();
+  const { error } = await supabase
+    .from("conversations")
+    .update({ unread_count: 0 })
+    .eq("id", conversationId)
+    .eq("assigned_user_profile_id", userProfileId);
+  if (error) return { ok: false, message: `Não foi possível marcar como lida: ${error.message}.` };
+  return { ok: true, message: "Conversa marcada como lida." };
+}
+
 /** Nota interna — nunca gera outbound_jobs (bloqueado estruturalmente por trigger, além de nunca ser chamado aqui). */
 export async function criarNotaInternaAction(conversationId: string, texto: string): Promise<AtendimentoActionState> {
   const textoLimpo = texto.trim();

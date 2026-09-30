@@ -9,6 +9,7 @@ import {
   concluirConversaAction,
   criarNotaInternaAction,
   enviarMensagemAction,
+  marcarConversaComoLidaAction,
   reabrirConversaAction,
   obterLinksAnexosAction,
   reenviarMensagemFalhadaAction,
@@ -37,7 +38,14 @@ type ConversaLista = {
   channel: { id: string; name: string } | null;
   team: { id: string; name: string } | null;
   assigned_user_profile: { id: string; full_name: string | null } | null;
+  // Só a última mensagem (sem nota interna) — diz se quem falou por último foi o cliente.
+  ultima_mensagem: { direction: "entrada" | "saida" }[] | null;
 };
+
+/** Cliente falou por último, o dono já viu (não está mais em "não lidas") e ninguém respondeu. */
+function aguardandoResposta(conversa: ConversaLista): boolean {
+  return conversa.status !== "encerrada" && conversa.unread_count === 0 && conversa.ultima_mensagem?.[0]?.direction === "entrada";
+}
 
 type UsuarioEmpresa = { id: string; full_name: string | null };
 
@@ -82,7 +90,7 @@ type SubFiltro = "todas" | "nao_lidas" | "aguardando_resposta";
 const SUB_FILTROS: { id: SubFiltro; rotulo: string; ajuda: string }[] = [
   { id: "todas", rotulo: "Todas", ajuda: "Todas as conversas deste escopo." },
   { id: "nao_lidas", rotulo: "Não lidas", ajuda: "O cliente mandou mensagem que ainda não foi vista." },
-  { id: "aguardando_resposta", rotulo: "Aguardando resposta", ajuda: "O cliente está esperando resposta de um humano." },
+  { id: "aguardando_resposta", rotulo: "Aguardando resposta", ajuda: "O cliente mandou a última mensagem, o responsável já viu e ainda não respondeu." },
 ];
 
 function iniciaisDe(nome: string | null) {
@@ -188,7 +196,8 @@ export function AtendimentoWorkspaceReal({
   const SELECT_CONVERSAS =
     "id, status, created_at, last_activity_at, last_message_preview, unread_count, assigned_user_profile_id, client_id, team_id, external_id, " +
     "contact:contacts(id, display_name, contact_phone_numbers(phone_e164, is_primary)), channel:channels(id, name), team:teams(id, name), " +
-    "assigned_user_profile:user_profiles!conversations_assigned_user_profile_id_fkey(id, full_name)";
+    "assigned_user_profile:user_profiles!conversations_assigned_user_profile_id_fkey(id, full_name), " +
+    "ultima_mensagem:messages(direction)";
 
   /**
    * Aplica o escopo da aba (quem atende) — company_id sempre explícito: RLS libera platform owner pra
@@ -255,7 +264,12 @@ export function AtendimentoWorkspaceReal({
       query = comEscopoDaAba(query, aba);
     }
 
-    const { data, error } = await query.order("last_activity_at", { ascending: false }).limit(50);
+    const { data, error } = await query
+      .eq("ultima_mensagem.is_internal_note", false)
+      .order("created_at", { referencedTable: "ultima_mensagem", ascending: false })
+      .limit(1, { referencedTable: "ultima_mensagem" })
+      .order("last_activity_at", { ascending: false })
+      .limit(50);
 
     // Mesma proteção das mensagens: se o usuário já trocou de aba, esta resposta é velha.
     if (pedido !== pedidoListaRef.current) return;
@@ -366,6 +380,18 @@ export function AtendimentoWorkspaceReal({
       .then(({ data }) => setUsuariosEmpresa((data ?? []) as UsuarioEmpresa[]));
   }, [supabase, companyId]);
 
+  /**
+   * Regra do Gabriel (30/09/2026): só o DONO da conversa (responsável) abrir marca como lida. Outra
+   * pessoa (supervisor, master, colega) pode abrir, ler e até responder — pro dono continua não lida.
+   * Só no clique: a conversa que a tela seleciona sozinha ao carregar não conta como "abriu".
+   */
+  function abrirConversa(conversa: ConversaLista) {
+    setSelecionadaId(conversa.id);
+    if (conversa.assigned_user_profile_id !== userProfileId || conversa.unread_count === 0) return;
+    setConversas((atual) => atual?.map((c) => (c.id === conversa.id ? { ...c, unread_count: 0 } : c)) ?? atual);
+    void marcarConversaComoLidaAction(conversa.id);
+  }
+
   const conversaSelecionada = conversas?.find((c) => c.id === selecionadaId) ?? null;
 
   /** Contagem de cada sub-filtro dentro da aba atual — computada da lista já carregada, sem round-trip novo. */
@@ -374,7 +400,7 @@ export function AtendimentoWorkspaceReal({
     return {
       todas: lista.length,
       nao_lidas: lista.filter((c) => c.unread_count > 0).length,
-      aguardando_resposta: lista.filter((c) => c.status === "aguardando_humano").length,
+      aguardando_resposta: lista.filter(aguardandoResposta).length,
     };
   }, [conversas]);
 
@@ -384,7 +410,7 @@ export function AtendimentoWorkspaceReal({
 
     if (aba !== "ia") {
       if (subFiltro === "nao_lidas") lista = lista.filter((c) => c.unread_count > 0);
-      else if (subFiltro === "aguardando_resposta") lista = lista.filter((c) => c.status === "aguardando_humano");
+      else if (subFiltro === "aguardando_resposta") lista = lista.filter(aguardandoResposta);
     }
 
     const termo = busca.trim().toLowerCase();
@@ -541,7 +567,7 @@ export function AtendimentoWorkspaceReal({
               <button
                 key={conversa.id}
                 type="button"
-                onClick={() => setSelecionadaId(conversa.id)}
+                onClick={() => abrirConversa(conversa)}
                 className={`flex w-full flex-col gap-1 border-b border-[var(--ns-border)] px-3 py-3 text-left transition ${
                   conversa.id === selecionadaId ? "bg-[var(--ns-primary)]/10" : "hover:bg-[var(--ns-surface-hover)]"
                 }`}

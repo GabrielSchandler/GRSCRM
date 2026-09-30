@@ -113,6 +113,29 @@ export async function marcarConversaComoLidaAction(conversationId: string): Prom
   return { ok: true, message: "Conversa marcada como lida." };
 }
 
+/**
+ * Editar / apagar para todos (0009). Toda regra (quem pode, 15 min / 48 h, Totalk bloqueado) fica
+ * no banco — aqui só traduz o resultado. Mensagem de WhatsApp volta "aguardando": só muda de
+ * verdade quando o WhatsApp confirmar.
+ */
+export async function editarMensagemAction(messageId: string, novoTexto: string): Promise<AtendimentoActionState> {
+  const { supabase } = await getCurrentUserContext();
+  const { data, error } = await supabase.rpc("editar_mensagem", { p_message_id: messageId, p_novo_texto: novoTexto });
+  if (error) return { ok: false, message: error.message };
+  revalidatePath("/atendimento");
+  const status = (data as { whatsapp_status: string }[] | null)?.[0]?.whatsapp_status;
+  return { ok: true, message: status === "aguardando" ? "Edição enviada — aguardando o WhatsApp confirmar." : "Mensagem editada." };
+}
+
+export async function apagarMensagemAction(messageId: string): Promise<AtendimentoActionState> {
+  const { supabase } = await getCurrentUserContext();
+  const { data, error } = await supabase.rpc("apagar_mensagem", { p_message_id: messageId });
+  if (error) return { ok: false, message: error.message };
+  revalidatePath("/atendimento");
+  const status = (data as { whatsapp_status: string }[] | null)?.[0]?.whatsapp_status;
+  return { ok: true, message: status === "aguardando" ? "Exclusão enviada — aguardando o WhatsApp confirmar." : "Mensagem apagada." };
+}
+
 /** Nota interna — nunca gera outbound_jobs (bloqueado estruturalmente por trigger, além de nunca ser chamado aqui). */
 export async function criarNotaInternaAction(conversationId: string, texto: string): Promise<AtendimentoActionState> {
   const textoLimpo = texto.trim();

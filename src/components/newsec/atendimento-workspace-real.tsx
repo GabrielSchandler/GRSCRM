@@ -3,11 +3,14 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle, Bot, Check, FileText, Phone, RefreshCw, Send, StickyNote, UserPlus, Users2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/browser";
-import type { ConversaEstado, ConversationStatus, Message } from "@/types/atendimento";
+import type { ConversaEstado, ConversationStatus, Message, MessageRevision } from "@/types/atendimento";
+import { AcoesMensagem, AvisoMensagemApagada, EditorMensagem, HistoricoRevisoes, permissoesDaMensagem } from "./mensagem-revisoes";
 import {
+  apagarMensagemAction,
   assumirConversaAction,
   concluirConversaAction,
   criarNotaInternaAction,
+  editarMensagemAction,
   enviarMensagemAction,
   marcarConversaComoLidaAction,
   reabrirConversaAction,
@@ -35,7 +38,7 @@ type ConversaLista = {
   team_id: string | null;
   external_id: string | null;
   contact: { id: string; display_name: string | null; contact_phone_numbers: TelefoneContato[] } | null;
-  channel: { id: string; name: string } | null;
+  channel: { id: string; name: string; provider: string } | null;
   team: { id: string; name: string } | null;
   assigned_user_profile: { id: string; full_name: string | null } | null;
   // Só a última mensagem (sem nota interna) — diz se quem falou por último foi o cliente.
@@ -176,6 +179,8 @@ export function AtendimentoWorkspaceReal({
   const [selecionadaId, setSelecionadaId] = useState<string | null>(null);
   const [mensagens, setMensagens] = useState<MensagemComAutor[] | null>(null);
   const [anexosPorMensagem, setAnexosPorMensagem] = useState<Record<string, AnexoParaExibir[]>>({});
+  const [revisoesPorMensagem, setRevisoesPorMensagem] = useState<Record<string, MessageRevision[]>>({});
+  const [editandoId, setEditandoId] = useState<string | null>(null);
   const [erroMensagens, setErroMensagens] = useState<string | null>(null);
 
   const [rascunhos, setRascunhos] = useState<Record<string, string>>({});
@@ -205,7 +210,7 @@ export function AtendimentoWorkspaceReal({
 
   const SELECT_CONVERSAS =
     "id, status, created_at, last_activity_at, last_message_preview, unread_count, assigned_user_profile_id, client_id, team_id, external_id, " +
-    "contact:contacts(id, display_name, contact_phone_numbers(phone_e164, is_primary)), channel:channels(id, name), team:teams(id, name), " +
+    "contact:contacts(id, display_name, contact_phone_numbers(phone_e164, is_primary)), channel:channels(id, name, provider), team:teams(id, name), " +
     "assigned_user_profile:user_profiles!conversations_assigned_user_profile_id_fkey(id, full_name), " +
     "ultima_mensagem:messages(direction)";
 
@@ -323,6 +328,8 @@ export function AtendimentoWorkspaceReal({
         grudadoNoFimRef.current = true;
         setMensagens(null);
         setAnexosPorMensagem({});
+        setRevisoesPorMensagem({});
+        setEditandoId(null);
       }
 
       // As 200 MAIS RECENTES (desc + inverte), não as 200 mais antigas: em conversa longa a
@@ -343,6 +350,23 @@ export function AtendimentoWorkspaceReal({
       } else {
         const lista = ((data ?? []) as unknown as MensagemComAutor[]).reverse();
         setMensagens(lista);
+        // Edições/exclusões (0009). Erro aqui (ex: migração ainda não aplicada) não derruba a conversa.
+        if (lista.length > 0) {
+          void supabase
+            .from("message_revisions")
+            .select(
+              "id, message_id, kind, origin, body_before, body_after, whatsapp_status, whatsapp_error, created_at, confirmed_at, " +
+                "requested_by:user_profiles!message_revisions_requested_by_user_profile_id_fkey(full_name)",
+            )
+            .in("message_id", lista.map((m) => m.id))
+            .order("created_at", { ascending: true })
+            .then(({ data: revisoes }) => {
+              if (conversaPedidaRef.current !== conversationId) return;
+              const agrupadas: Record<string, MessageRevision[]> = {};
+              for (const rev of (revisoes ?? []) as unknown as MessageRevision[]) (agrupadas[rev.message_id] ??= []).push(rev);
+              setRevisoesPorMensagem(agrupadas);
+            });
+        }
         // Arquivos (áudio/imagem/documento/vídeo): links assinados pedidos ao servidor só pras
         // mensagens de mídia desta conversa. Mesma proteção de corrida das mensagens.
         const idsMidia = lista.filter((m) => TIPOS_COM_ARQUIVO.has(m.message_type)).map((m) => m.id);
@@ -437,6 +461,27 @@ export function AtendimentoWorkspaceReal({
       return nomeBate || telefoneBate;
     });
   }, [conversas, busca, subFiltro, aba]);
+
+  async function handleEditarMensagem(messageId: string, texto: string) {
+    if (!selecionadaId) return;
+    const resultado = await editarMensagemAction(messageId, texto);
+    mostrarAviso(resultado.message);
+    if (resultado.ok) {
+      setEditandoId(null);
+      await carregarMensagens(selecionadaId, { limpar: false });
+    }
+  }
+
+  async function handleApagarMensagem(mensagem: Message) {
+    if (!selecionadaId) return;
+    const pergunta = mensagem.is_internal_note
+      ? "Apagar esta nota interna? A equipe continua vendo, marcada como apagada."
+      : "Apagar para todos? Some do WhatsApp do cliente (depois que o WhatsApp confirmar). Aqui a equipe continua vendo, marcada como apagada.";
+    if (!window.confirm(pergunta)) return;
+    const resultado = await apagarMensagemAction(mensagem.id);
+    mostrarAviso(resultado.message);
+    if (resultado.ok) await carregarMensagens(selecionadaId, { limpar: false });
+  }
 
   function mostrarAviso(texto: string) {
     setAviso(texto);
@@ -703,16 +748,47 @@ export function AtendimentoWorkspaceReal({
                 <p className="text-center text-sm text-[var(--ns-text-secondary)]">Nenhuma mensagem ainda.</p>
               )}
               {mensagens?.map((mensagem) => {
+                const revisoes = revisoesPorMensagem[mensagem.id] ?? [];
+                const apagada = Boolean(mensagem.deleted_at);
+                const { podeEditar, podeApagar } = permissoesDaMensagem(mensagem, {
+                  userProfileId,
+                  podeApagarDeOutros: isAdminOuManager || isPlatformOwner,
+                  canalProvider: conversaSelecionada?.channel?.provider ?? null,
+                });
+                const editando = editandoId === mensagem.id;
+
                 if (mensagem.is_internal_note) {
                   return (
                     <div
                       key={mensagem.id}
-                      className="mx-auto flex max-w-md items-start gap-2 rounded-lg border border-[var(--ns-warning)]/40 bg-[var(--ns-warning)]/10 px-3 py-2 text-xs text-[var(--ns-text)]"
+                      className={`mx-auto flex max-w-md items-start gap-2 rounded-lg border px-3 py-2 text-xs text-[var(--ns-text)] ${
+                        apagada ? "border-[var(--ns-danger)]/40 bg-[var(--ns-danger)]/10" : "border-[var(--ns-warning)]/40 bg-[var(--ns-warning)]/10"
+                      }`}
                     >
                       <StickyNote aria-hidden="true" className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[var(--ns-warning)]" />
-                      <div>
-                        <p className="font-medium">Nota interna — nunca vai para o cliente</p>
-                        <p className="text-[var(--ns-text-secondary)]">{corpoSemAssinaturaAntiga(mensagem)}</p>
+                      <div className="min-w-0 flex-1">
+                        {apagada && <AvisoMensagemApagada mensagem={mensagem} revisoes={revisoes} />}
+                        <p className="flex items-center justify-between gap-2 font-medium">
+                          Nota interna — nunca vai para o cliente
+                          <AcoesMensagem
+                            podeEditar={podeEditar && !editando}
+                            podeApagar={podeApagar && !editando}
+                            ehNota
+                            claro={false}
+                            onEditar={() => setEditandoId(mensagem.id)}
+                            onApagar={() => handleApagarMensagem(mensagem)}
+                          />
+                        </p>
+                        {editando ? (
+                          <EditorMensagem
+                            textoInicial={mensagem.body ?? ""}
+                            onSalvar={(texto) => handleEditarMensagem(mensagem.id, texto)}
+                            onCancelar={() => setEditandoId(null)}
+                          />
+                        ) : (
+                          <p className={`text-[var(--ns-text-secondary)] ${apagada ? "italic opacity-80" : ""}`}>{corpoSemAssinaturaAntiga(mensagem)}</p>
+                        )}
+                        <HistoricoRevisoes revisoes={revisoes} claro={false} />
                       </div>
                     </div>
                   );
@@ -731,9 +807,14 @@ export function AtendimentoWorkspaceReal({
                     )}
                     <div
                       className={`max-w-[70%] rounded-2xl px-3 py-2 text-sm ${
-                        doCliente ? "bg-[var(--ns-surface-hover)] text-[var(--ns-text)]" : "bg-[var(--ns-primary)] text-[var(--ns-primary-foreground)]"
+                        apagada
+                          ? "border border-dashed border-[var(--ns-danger)]/60 bg-[var(--ns-danger)]/10 text-[var(--ns-text)]"
+                          : doCliente
+                            ? "bg-[var(--ns-surface-hover)] text-[var(--ns-text)]"
+                            : "bg-[var(--ns-primary)] text-[var(--ns-primary-foreground)]"
                       }`}
                     >
+                      {apagada && <AvisoMensagemApagada mensagem={mensagem} revisoes={revisoes} />}
                       {TIPOS_COM_ARQUIVO.has(mensagem.message_type) && (
                         <ArquivoDaMensagem
                           tipo={mensagem.message_type}
@@ -741,11 +822,22 @@ export function AtendimentoWorkspaceReal({
                           doCliente={doCliente}
                         />
                       )}
-                      {corpoSemAssinaturaAntiga(mensagem) && (
-                        <p className={`whitespace-pre-wrap ${TIPOS_COM_ARQUIVO.has(mensagem.message_type) ? "mt-1" : ""}`}>
-                          {corpoSemAssinaturaAntiga(mensagem)}
-                        </p>
+                      {editando ? (
+                        <EditorMensagem
+                          textoInicial={mensagem.body ?? ""}
+                          onSalvar={(texto) => handleEditarMensagem(mensagem.id, texto)}
+                          onCancelar={() => setEditandoId(null)}
+                        />
+                      ) : (
+                        corpoSemAssinaturaAntiga(mensagem) && (
+                          <p
+                            className={`whitespace-pre-wrap ${TIPOS_COM_ARQUIVO.has(mensagem.message_type) ? "mt-1" : ""} ${apagada ? "italic opacity-80" : ""}`}
+                          >
+                            {corpoSemAssinaturaAntiga(mensagem)}
+                          </p>
+                        )
                       )}
+                      <HistoricoRevisoes revisoes={revisoes} claro={!doCliente && !apagada} />
                       <div
                         className={`mt-1 flex items-center justify-end gap-1.5 text-[10px] ${
                           doCliente ? "text-[var(--ns-text-secondary)]" : "text-[var(--ns-primary-foreground)]/70"
@@ -766,6 +858,14 @@ export function AtendimentoWorkspaceReal({
                         {!doCliente && (mensagem.status === "enviada" || mensagem.status === "entregue" || mensagem.status === "lida") && (
                           <Check aria-hidden="true" className="h-3 w-3" />
                         )}
+                        <AcoesMensagem
+                          podeEditar={podeEditar && !editando}
+                          podeApagar={podeApagar && !editando}
+                          ehNota={false}
+                          claro={!doCliente && !apagada}
+                          onEditar={() => setEditandoId(mensagem.id)}
+                          onApagar={() => handleApagarMensagem(mensagem)}
+                        />
                         <span>{horaOuData(mensagem.created_at, true)}</span>
                       </div>
                     </div>

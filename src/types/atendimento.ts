@@ -65,6 +65,25 @@ export type Message = {
   sent_at: string | null;
   delivered_at: string | null;
   read_at: string | null;
+  // 0009 — opcionais: antes da migração ser aplicada o banco não devolve estes campos.
+  edited_at?: string | null;
+  deleted_at?: string | null;
+  deleted_by_user_profile_id?: string | null;
+};
+
+/** Edição/exclusão de mensagem e a confirmação do WhatsApp (tabela message_revisions, 0009). */
+export type MessageRevision = {
+  id: string;
+  message_id: string;
+  kind: "edicao" | "exclusao";
+  origin: "equipe" | "cliente";
+  body_before: string | null;
+  body_after: string | null;
+  whatsapp_status: "nao_se_aplica" | "aguardando" | "confirmado" | "recusado";
+  whatsapp_error: string | null;
+  created_at: string;
+  confirmed_at: string | null;
+  requested_by: { full_name: string | null } | null;
 };
 
 export type ConversationTransfer = {

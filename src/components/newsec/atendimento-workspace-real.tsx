@@ -142,6 +142,13 @@ export function AtendimentoWorkspaceReal({
   const [aba, setAba] = useState<Aba>("meus");
   const [subFiltro, setSubFiltro] = useState<SubFiltro>("todas");
   const [busca, setBusca] = useState("");
+  // Versão "assentada" da busca (400ms depois da última tecla) — é ela que dispara a consulta ao
+  // banco, pra não fazer uma consulta por letra digitada.
+  const [buscaAplicada, setBuscaAplicada] = useState("");
+  useEffect(() => {
+    const timer = window.setTimeout(() => setBuscaAplicada(busca), 400);
+    return () => window.clearTimeout(timer);
+  }, [busca]);
   const [conversas, setConversas] = useState<ConversaLista[] | null>(null);
   const [contagensAbas, setContagensAbas] = useState<Record<Aba, number | null>>({ meus: null, outros: null, ia: null });
   const [erroLista, setErroLista] = useState<string | null>(null);
@@ -201,11 +208,42 @@ export function AtendimentoWorkspaceReal({
     setCarregandoLista(true);
     setErroLista(null);
 
-    const query = comEscopoDaAba(supabase.from("conversations").select(SELECT_CONVERSAS), aba)
-      .order("last_activity_at", { ascending: false })
-      .limit(50);
+    // Busca vai no BANCO, não só nas 50 conversas já carregadas — antes, procurar um telefone
+    // de alguém fora da lista inicial não achava nada (relatado pelo Gabriel, 30/09/2026). Com
+    // busca ativa, procura em todas as abas (RLS continua limitando o que cada um pode ver).
+    const termo = buscaAplicada.trim();
+    let query = supabase.from("conversations").select(SELECT_CONVERSAS);
+    if (termo.length >= 2) {
+      const digitos = termo.replace(/\D/g, "");
+      const contatoIds = new Set<string>();
+      const { data: porNome } = await supabase
+        .from("contacts")
+        .select("id")
+        .eq("company_id", companyId)
+        .ilike("display_name", `%${termo}%`)
+        .limit(200);
+      for (const c of porNome ?? []) contatoIds.add(c.id);
+      if (digitos.length >= 4) {
+        const { data: porTelefone } = await supabase
+          .from("contact_phone_numbers")
+          .select("contact_id")
+          .eq("company_id", companyId)
+          .ilike("phone_e164", `%${digitos}%`)
+          .limit(200);
+        for (const t of porTelefone ?? []) contatoIds.add(t.contact_id);
+      }
+      if (pedido !== pedidoListaRef.current) return;
+      if (contatoIds.size === 0) {
+        setConversas([]);
+        setCarregandoLista(false);
+        return;
+      }
+      query = query.eq("company_id", companyId).in("contact_id", [...contatoIds]);
+    } else {
+      query = comEscopoDaAba(query, aba);
+    }
 
-    const { data, error } = await query;
+    const { data, error } = await query.order("last_activity_at", { ascending: false }).limit(50);
 
     // Mesma proteção das mensagens: se o usuário já trocou de aba, esta resposta é velha.
     if (pedido !== pedidoListaRef.current) return;
@@ -218,7 +256,7 @@ export function AtendimentoWorkspaceReal({
     }
     setCarregandoLista(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [supabase, aba, userProfileId, companyId]);
+  }, [supabase, aba, userProfileId, companyId, buscaAplicada]);
 
   /** Contagem total de cada aba (independente da aba selecionada), pro numerinho ao lado do rótulo. */
   const carregarContagensAbas = useCallback(async () => {
@@ -410,6 +448,11 @@ export function AtendimentoWorkspaceReal({
             placeholder="Buscar por nome ou telefone..."
             className="w-full rounded-lg border border-[var(--ns-border)] bg-[var(--ns-surface)] px-3 py-2 text-sm text-[var(--ns-text)] outline-none placeholder:text-[var(--ns-text-secondary)] focus-visible:ring-2 focus-visible:ring-[var(--ns-primary)]"
           />
+          {buscaAplicada.trim().length >= 2 && (
+            <p className="-mt-1 text-[11px] text-[var(--ns-text-secondary)]">
+              Buscando em todas as conversas (todas as abas), não só nas carregadas.
+            </p>
+          )}
           {/* Pergunta 1: de quem é a conversa? "Outros" é o atendimento humano de outro login (atribuído a
               outra pessoa, ou ainda sem ninguém) — não é "a equipe" no sentido de departamento/`teams`,
               porque quem supervisiona pode ver conversa de qualquer equipe aqui, não só a própria. "IA" só

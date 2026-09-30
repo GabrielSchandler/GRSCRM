@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle, Bot, Check, FileText, Phone, RefreshCw, Send, StickyNote, UserPlus, Users2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/browser";
 import type { ConversaEstado, ConversationStatus, Message } from "@/types/atendimento";
@@ -193,6 +193,16 @@ export function AtendimentoWorkspaceReal({
   const conversaPedidaRef = useRef<string | null>(null);
   const pedidoListaRef = useRef(0);
 
+  // Conversa abre já na ÚLTIMA mensagem (pedido do Gabriel, 30/09/2026) — sem precisar rolar o
+  // histórico todo. "Grudado no fim" acompanha se a pessoa subiu pra ler: se subiu, foto/áudio
+  // terminando de carregar não a arrasta de volta pro fim.
+  const areaMensagensRef = useRef<HTMLDivElement | null>(null);
+  const grudadoNoFimRef = useRef(true);
+  function rolarParaOFim() {
+    const area = areaMensagensRef.current;
+    if (area && grudadoNoFimRef.current) area.scrollTop = area.scrollHeight;
+  }
+
   const SELECT_CONVERSAS =
     "id, status, created_at, last_activity_at, last_message_preview, unread_count, assigned_user_profile_id, client_id, team_id, external_id, " +
     "contact:contacts(id, display_name, contact_phone_numbers(phone_e164, is_primary)), channel:channels(id, name), team:teams(id, name), " +
@@ -310,6 +320,7 @@ export function AtendimentoWorkspaceReal({
       // com o cabeçalho da nova enquanto a resposta não chega. Recarregar a MESMA conversa
       // (depois de enviar/assumir) não esvazia, pra não piscar a tela.
       if (limpar) {
+        grudadoNoFimRef.current = true;
         setMensagens(null);
         setAnexosPorMensagem({});
       }
@@ -360,6 +371,10 @@ export function AtendimentoWorkspaceReal({
   useEffect(() => {
     if (aba === "ia") setSubFiltro("todas");
   }, [aba]);
+
+  useLayoutEffect(() => {
+    rolarParaOFim();
+  }, [mensagens, anexosPorMensagem]);
 
   useEffect(() => {
     if (selecionadaId) carregarMensagens(selecionadaId);
@@ -668,7 +683,17 @@ export function AtendimentoWorkspaceReal({
               </div>
             </div>
 
-            <div className="flex-1 space-y-3 overflow-y-auto px-4 py-4">
+            <div
+              ref={areaMensagensRef}
+              onScroll={(evento) => {
+                const area = evento.currentTarget;
+                grudadoNoFimRef.current = area.scrollHeight - area.scrollTop - area.clientHeight < 80;
+              }}
+              // "load" de imagem/vídeo não borbulha — captura pega quando a mídia termina e muda a altura.
+              onLoadCapture={rolarParaOFim}
+              onLoadedMetadataCapture={rolarParaOFim}
+              className="flex-1 space-y-3 overflow-y-auto px-4 py-4"
+            >
               {erroMensagens && (
                 <p className="mx-auto max-w-md rounded-lg border border-[var(--ns-danger)]/40 bg-[var(--ns-danger)]/10 px-3 py-2 text-xs text-[var(--ns-danger)]">
                   {erroMensagens}

@@ -587,7 +587,7 @@ export function AtendimentoWorkspaceReal({
                     {conversaSelecionada.contact?.display_name ?? "Contato sem nome"}
                   </p>
                   <p className="truncate text-xs text-[var(--ns-text-secondary)]">
-                    {formatarTelefone(telefoneDoContato(conversaSelecionada.contact)) ?? "Sem telefone cadastrado"}
+                    {formatarTelefone(telefoneDoContato(conversaSelecionada.contact)) ?? "Número privado"}
                     {" · "}
                     {conversaSelecionada.channel?.name ?? "Canal"} ·{" "}
                     {nomeResponsavel(conversaSelecionada, "sem responsável")}
@@ -792,7 +792,7 @@ export function AtendimentoWorkspaceReal({
                     {conversaSelecionada.contact?.display_name ?? "Contato sem nome"}
                   </p>
                   <p className="truncate text-xs tabular-nums text-[var(--ns-text-secondary)]">
-                    {formatarTelefone(telefoneDoContato(conversaSelecionada.contact)) ?? "Sem telefone cadastrado"}
+                    {formatarTelefone(telefoneDoContato(conversaSelecionada.contact)) ?? "Número privado"}
                   </p>
                 </div>
               </div>

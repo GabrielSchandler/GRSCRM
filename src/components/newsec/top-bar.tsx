@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Search } from "lucide-react";
+import { MenuMobile } from "./menu-mobile";
 import { SinoNotificacoes } from "./sino-notificacoes";
 import { ThemeToggle } from "./theme-toggle";
 
@@ -12,7 +13,8 @@ export function TopBar({
   links?: Array<{ href: string; label: string }>;
 }) {
   return (
-    <div className="flex items-center gap-3 border-b border-[var(--ns-border)] px-4 py-2.5">
+    <div className="flex items-center gap-2 border-b border-[var(--ns-border)] px-3 py-2 sm:gap-3 sm:px-4 sm:py-2.5">
+      <MenuMobile />
       {links.length > 0 && (
         <nav className="flex shrink-0 items-center gap-1">
           {links.map((link) => (
@@ -26,7 +28,8 @@ export function TopBar({
           ))}
         </nav>
       )}
-      <div className="relative w-full max-w-md">
+      {/* Busca de demonstração: some no celular pra sobrar espaço. */}
+      <div className="relative hidden w-full max-w-md sm:block">
         <Search
           aria-hidden="true"
           className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--ns-text-secondary)]"

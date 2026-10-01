@@ -76,6 +76,7 @@ export async function enviarMensagemAction(
   conversationId: string,
   texto: string,
   idempotencyKey: string,
+  respostaA?: string | null,
 ): Promise<AtendimentoActionState> {
   const textoLimpo = texto.trim();
   if (!textoLimpo) return { ok: false, message: "Mensagem vazia." };
@@ -95,6 +96,10 @@ export async function enviarMensagemAction(
   if (error) return { ok: false, message: `Não foi possível enviar: ${error.message}.` };
 
   const resultado = data?.[0];
+  // Citação: gravada logo depois do envio (enviar_mensagem_com_job não foi mexida — ver 0011).
+  if (respostaA && resultado?.message_id && !resultado.ja_existia) {
+    await supabase.rpc("definir_resposta_mensagem", { p_message_id: resultado.message_id, p_reply_to: respostaA });
+  }
   return { ok: true, message: resultado?.ja_existia ? "Mensagem já enviada." : "Mensagem enviada." };
 }
 
@@ -135,7 +140,11 @@ export async function apagarMensagemAction(messageId: string): Promise<Atendimen
 }
 
 /** Nota interna — nunca gera outbound_jobs (bloqueado estruturalmente por trigger, além de nunca ser chamado aqui). */
-export async function criarNotaInternaAction(conversationId: string, texto: string): Promise<AtendimentoActionState> {
+export async function criarNotaInternaAction(
+  conversationId: string,
+  texto: string,
+  respostaA?: string | null,
+): Promise<AtendimentoActionState> {
   const textoLimpo = texto.trim();
   if (!textoLimpo) return { ok: false, message: "Nota vazia." };
 
@@ -151,6 +160,8 @@ export async function criarNotaInternaAction(conversationId: string, texto: stri
     message_type: "nota",
     body: textoLimpo,
     status: "criada",
+    // Só manda o campo quando cita algo (a coluna vem da migração 0011; o banco confere que é da mesma conversa).
+    ...(respostaA ? { reply_to_message_id: respostaA } : {}),
   });
 
   if (error) return { ok: false, message: `Não foi possível salvar a nota: ${error.message}.` };
@@ -288,4 +299,12 @@ export async function reabrirConversaAction(conversationId: string): Promise<Ate
   if (!data || data.length === 0) return { ok: false, message: "Você não tem acesso a esta conversa." };
 
   return { ok: true, message: "Conversa reaberta." };
+}
+
+/** Liga (ou desliga, com null) a conversa — e todas do mesmo contato — ao cadastro do cliente. Regras no banco (0011). */
+export async function vincularClienteConversaAction(conversationId: string, clientId: string | null): Promise<AtendimentoActionState> {
+  const { supabase } = await getCurrentUserContext();
+  const { error } = await supabase.rpc("vincular_cliente_conversa", { p_conversation_id: conversationId, p_client_id: clientId });
+  if (error) return { ok: false, message: error.message };
+  return { ok: true, message: clientId ? "Conversa ligada ao cadastro do cliente." : "Vínculo com o cliente desfeito." };
 }

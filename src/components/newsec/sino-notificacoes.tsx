@@ -65,7 +65,7 @@ export function SinoNotificacoes() {
       </button>
 
       {aberto && (
-        <div className="absolute right-0 z-40 mt-1 w-80 rounded-xl border border-[var(--ns-border)] bg-[var(--ns-surface)] p-2 shadow-lg">
+        <div className="fixed inset-x-2 top-14 z-40 rounded-xl border border-[var(--ns-border)] bg-[var(--ns-surface)] p-2 shadow-lg sm:absolute sm:inset-x-auto sm:right-0 sm:top-auto sm:mt-1 sm:w-80">
           <div className="mb-1 grid grid-cols-2 gap-1.5 text-xs">
             <Link href="/atendimento" onClick={() => setAberto(false)} className="rounded-lg bg-[var(--ns-surface-hover)] px-2.5 py-2 text-[var(--ns-text)]">
               <span className="block text-[11px] text-[var(--ns-text-secondary)]">WhatsApp não lidas</span>
@@ -129,7 +129,7 @@ export function SinoNotificacoes() {
                 className="flex w-full items-center gap-2 rounded-lg px-1.5 py-1.5 text-xs font-medium text-[var(--ns-primary)] hover:bg-[var(--ns-surface-hover)]"
               >
                 <BellRing aria-hidden="true" className="h-3.5 w-3.5" />
-                Ativar avisos do Windows (mesmo com outra aba aberta)
+                Ativar avisos do sistema (mesmo com o navegador minimizado)
               </button>
             )}
             {estado.permissaoNavegador === "denied" && (

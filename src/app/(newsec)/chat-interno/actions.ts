@@ -45,6 +45,7 @@ export async function enviarMensagemInternaAction(
   corpo: string,
   anexos: AnexoParaEnviar[],
   chave: string,
+  respostaA?: string | null,
 ): Promise<ResultadoAcao<{ id: string }>> {
   const { supabase } = await getCurrentUserContext();
   const { data, error } = await supabase.rpc("enviar_mensagem_interna", {
@@ -52,6 +53,8 @@ export async function enviarMensagemInternaAction(
     p_corpo: corpo,
     p_anexos: anexos,
     p_chave: chave,
+    // p_resposta só quando cita (parâmetro novo da 0011).
+    ...(respostaA ? { p_resposta: respostaA } : {}),
   });
   if (error) return { ok: false, mensagem: error.message };
   return { ok: true, dados: { id: data as string } };
@@ -100,4 +103,20 @@ export async function criarGrupoInternoAction(titulo: string, membros: string[])
 export async function marcarConversaInternaLidaAction(threadId: string): Promise<void> {
   const { supabase } = await getCurrentUserContext();
   await supabase.rpc("marcar_conversa_interna_lida", { p_thread_id: threadId });
+}
+
+/** Qualquer participante do grupo adiciona colegas (0011). */
+export async function adicionarMembrosGrupoAction(threadId: string, membros: string[]): Promise<ResultadoAcao<{ adicionados: number }>> {
+  const { supabase } = await getCurrentUserContext();
+  const { data, error } = await supabase.rpc("adicionar_membros_grupo_interno", { p_thread_id: threadId, p_membros: membros });
+  if (error) return { ok: false, mensagem: error.message };
+  return { ok: true, dados: { adicionados: (data as number) ?? 0 } };
+}
+
+/** Quem criou o grupo remove qualquer um; qualquer pessoa remove a si mesma (= sair do grupo). */
+export async function removerMembroGrupoAction(threadId: string, membroId: string): Promise<ResultadoAcao> {
+  const { supabase } = await getCurrentUserContext();
+  const { error } = await supabase.rpc("remover_membro_grupo_interno", { p_thread_id: threadId, p_membro: membroId });
+  if (error) return { ok: false, mensagem: error.message };
+  return { ok: true, dados: undefined };
 }

@@ -1,12 +1,14 @@
 "use client";
 
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { AlertTriangle, Bot, Check, FileText, RefreshCw, Send, StickyNote, UserPlus, Users2 } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Bot, FileText, Info, MoreVertical, RefreshCw, Search, Send, StickyNote, UserPlus, Users2, X } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/browser";
 import { definirFoco } from "@/lib/newsec/notificacoes";
 import type { ConversaEstado, ConversationStatus, Message, MessageRevision } from "@/types/atendimento";
 import { AcoesMensagem, AvisoMensagemApagada, EditorMensagem, HistoricoRevisoes, permissoesDaMensagem } from "./mensagem-revisoes";
+import { BarraCitando, BotaoResponder, BuscaNaConversa, CitacaoNaBolha, ehTelaDeCelular, ehTelaEstreita, irAteMensagem, Tiques, type ResultadoBusca } from "./chat-comum";
+import { VinculoCliente } from "./vinculo-cliente";
 import {
   apagarMensagemAction,
   assumirConversaAction,
@@ -222,6 +224,12 @@ export function AtendimentoWorkspaceReal({
   const [editandoId, setEditandoId] = useState<string | null>(null);
   const [erroMensagens, setErroMensagens] = useState<string | null>(null);
   const [temMensagensAnteriores, setTemMensagensAnteriores] = useState(false);
+  const [respondendo, setRespondendo] = useState<MensagemComAutor | null>(null);
+  const [buscaNaConversaAberta, setBuscaNaConversaAberta] = useState(false);
+  const [destaqueId, setDestaqueId] = useState<string | null>(null);
+  // Painel do cliente (direita): fixo em tela larga; em tela menor abre por cima, pelo botão (i).
+  const [painelAberto, setPainelAberto] = useState(false);
+  const [menuMaisAberto, setMenuMaisAberto] = useState(false);
   const [carregandoAnteriores, setCarregandoAnteriores] = useState(false);
 
   const [rascunhos, setRascunhos] = useState<Record<string, string>>({});
@@ -411,6 +419,9 @@ export function AtendimentoWorkspaceReal({
         setAnexosPorMensagem({});
         setRevisoesPorMensagem({});
         setEditandoId(null);
+        setRespondendo(null);
+        setBuscaNaConversaAberta(false);
+        setPainelAberto(false);
       }
 
       // As 200 MAIS RECENTES (desc + inverte), não as 200 mais antigas: em conversa longa a
@@ -510,6 +521,58 @@ export function AtendimentoWorkspaceReal({
     await carregarExtras(conversationId, mudadas, { pularMidiaComLink: true });
   }
 
+  const buscarNaConversa = useCallback(
+    async (termo: string): Promise<ResultadoBusca[]> => {
+      if (!selecionadaId) return [];
+      const { data } = await supabase
+        .from("messages")
+        .select(SELECT_MENSAGEM)
+        .eq("conversation_id", selecionadaId)
+        .ilike("body", `%${termo.replace(/[%_]/g, "")}%`)
+        .order("created_at", { ascending: false })
+        .limit(30);
+      return ((data ?? []) as unknown as MensagemComAutor[]).map((m) => ({
+        id: m.id,
+        texto: m.body ?? "",
+        autor: m.direction === "entrada" ? "Cliente" : m.is_internal_note ? `Nota · ${remetenteDe(m)}` : remetenteDe(m),
+        quando: m.created_at,
+      }));
+    },
+    [supabase, selecionadaId],
+  );
+
+  /** Leva a conversa até uma mensagem; se ela é antiga e não está carregada, carrega a partir dela. */
+  async function irPara(id: string) {
+    const conversationId = selecionadaId;
+    if (!conversationId) return;
+    setBuscaNaConversaAberta(false);
+    grudadoNoFimRef.current = false;
+    if (!mensagens?.some((m) => m.id === id)) {
+      const { data: alvo } = await supabase.from("messages").select("created_at").eq("id", id).maybeSingle();
+      if (!alvo) return;
+      const [antes, depois] = await Promise.all([
+        supabase.from("messages").select(SELECT_MENSAGEM).eq("conversation_id", conversationId).lt("created_at", alvo.created_at).order("created_at", { ascending: false }).limit(50),
+        supabase.from("messages").select(SELECT_MENSAGEM).eq("conversation_id", conversationId).gte("created_at", alvo.created_at).order("created_at", { ascending: true }).limit(400),
+      ]);
+      if (conversaPedidaRef.current !== conversationId) return;
+      const lista = [
+        ...(((antes.data ?? []) as unknown as MensagemComAutor[]).reverse()),
+        ...((depois.data ?? []) as unknown as MensagemComAutor[]),
+      ];
+      setMensagens(lista);
+      setTemMensagensAnteriores((antes.data?.length ?? 0) === 50);
+      registrarSincronizacao(lista);
+      linksAssinadosEmRef.current = Date.now();
+      await carregarExtras(conversationId, lista, { substituir: true });
+    }
+    irAteMensagem(id, setDestaqueId);
+  }
+
+  function autorDaMensagem(m: MensagemComAutor) {
+    if (m.direction === "entrada") return conversaSelecionada?.contact?.display_name ?? "Cliente";
+    return m.is_internal_note ? `${remetenteDe(m)} (nota)` : remetenteDe(m);
+  }
+
   async function carregarMensagensAnteriores() {
     const conversationId = selecionadaId;
     const primeira = mensagens?.[0];
@@ -573,10 +636,17 @@ export function AtendimentoWorkspaceReal({
   }, [selecionadaId, carregarMensagens]);
 
   useEffect(() => {
-    if (!selecionadaId && conversas && conversas.length > 0) {
+    // No celular a lista é a primeira tela; abrir a 1ª conversa sozinho esconderia a lista.
+    if (!selecionadaId && conversas && conversas.length > 0 && !ehTelaEstreita()) {
       setSelecionadaId(conversas[0].id);
     }
   }, [conversas, selecionadaId]);
+
+  function voltarParaLista() {
+    abertaPeloDonoRef.current = null;
+    conversaPedidaRef.current = null;
+    setSelecionadaId(null);
+  }
 
   // Atualização automática. A função mais nova fica num ref, então o intervalo não precisa ser
   // recriado a cada mudança de tela.
@@ -757,13 +827,14 @@ export function AtendimentoWorkspaceReal({
 
     setEnviando(true);
     const resultado = emModoNota
-      ? await criarNotaInternaAction(selecionadaId, texto)
-      : await enviarMensagemAction(selecionadaId, texto, crypto.randomUUID());
+      ? await criarNotaInternaAction(selecionadaId, texto, respondendo?.id ?? null)
+      : await enviarMensagemAction(selecionadaId, texto, crypto.randomUUID(), respondendo?.id ?? null);
     setEnviando(false);
     mostrarAviso(resultado.message);
 
     if (resultado.ok) {
       setRascunhos((atual) => ({ ...atual, [selecionadaId]: "" }));
+      setRespondendo(null);
       grudadoNoFimRef.current = true;
       // Tudo ao mesmo tempo (antes: uma consulta esperando a outra, ~3x mais lento).
       await Promise.all([carregarNovidadesDaConversa(selecionadaId), carregarConversas({ silencioso: true }), carregarContagensAbas()]);
@@ -809,7 +880,8 @@ export function AtendimentoWorkspaceReal({
 
   return (
     <div className="flex h-full min-h-0 w-full">
-      <div className="flex h-full w-[300px] shrink-0 flex-col border-r border-[var(--ns-border)]">
+      {/* Celular: lista e conversa são duas telas (abre a conversa → some a lista; "voltar" → lista). */}
+      <div className={`${conversaSelecionada ? "hidden lg:flex" : "flex"} h-full w-full shrink-0 flex-col border-r border-[var(--ns-border)] lg:w-[300px]`}>
         <div className="border-b border-[var(--ns-border)] px-3 pt-3">
           <div className="mb-3 flex items-center justify-between gap-2">
             <h1 className="text-lg font-semibold text-[var(--ns-text)]">Atendimento</h1>
@@ -940,16 +1012,24 @@ export function AtendimentoWorkspaceReal({
         </div>
       </div>
 
-      <div className="flex h-full min-w-[420px] flex-1 flex-col">
+      <div className={`${conversaSelecionada ? "flex" : "hidden lg:flex"} @container h-full min-w-0 flex-1 flex-col lg:min-w-[420px]`}>
         {!conversaSelecionada ? (
           <div className="flex flex-1 items-center justify-center text-sm text-[var(--ns-text-secondary)]">
             Selecione uma conversa.
           </div>
         ) : (
           <>
-            <div className="flex items-center justify-between gap-3 border-b border-[var(--ns-border)] px-4 py-3">
-              <div className="flex min-w-0 items-center gap-3">
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[var(--ns-primary)]/15 text-sm font-semibold text-[var(--ns-primary)]">
+            <div className="flex items-center justify-between gap-2 border-b border-[var(--ns-border)] px-2 py-2 @lg:gap-3 @lg:px-4 @lg:py-3">
+              <div className="flex min-w-0 flex-1 items-center gap-2 @lg:gap-3">
+                <button
+                  type="button"
+                  onClick={voltarParaLista}
+                  aria-label="Voltar para a lista"
+                  className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-[var(--ns-text)] hover:bg-[var(--ns-surface-hover)] lg:hidden"
+                >
+                  <ArrowLeft aria-hidden="true" className="h-5 w-5" />
+                </button>
+                <div className="hidden h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[var(--ns-primary)]/15 text-sm font-semibold text-[var(--ns-primary)] @lg:flex">
                   {iniciaisDe(conversaSelecionada.contact?.display_name ?? null)}
                 </div>
                 <div className="min-w-0">
@@ -964,29 +1044,42 @@ export function AtendimentoWorkspaceReal({
                   </p>
                 </div>
               </div>
-              <div className="flex shrink-0 items-center gap-2">
-                <EstadoBadge estado={STATUS_PARA_BADGE[conversaSelecionada.status]} />
+              <div className="flex shrink-0 items-center gap-1 @lg:gap-2">
+                <span className="hidden @3xl:inline-flex">
+                  <EstadoBadge estado={STATUS_PARA_BADGE[conversaSelecionada.status]} />
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setBuscaNaConversaAberta((v) => !v)}
+                  title="Buscar nesta conversa"
+                  aria-label="Buscar nesta conversa"
+                  className={`hidden h-8 w-8 items-center justify-center rounded-lg border border-[var(--ns-border)] text-[var(--ns-text)] transition hover:bg-[var(--ns-surface-hover)] @md:inline-flex ${buscaNaConversaAberta ? "bg-[var(--ns-surface-hover)]" : ""}`}
+                >
+                  <Search aria-hidden="true" className="h-3.5 w-3.5" />
+                </button>
                 {!conversaSelecionada.assigned_user_profile_id && (
                   <button
                     type="button"
                     onClick={handleAssumir}
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--ns-border)] px-3 py-1.5 text-xs font-medium text-[var(--ns-text)] transition hover:bg-[var(--ns-surface-hover)]"
+                    title="Assumir"
+                    className="hidden h-8 items-center gap-1.5 rounded-lg border border-[var(--ns-border)] px-2 text-xs font-medium text-[var(--ns-text)] transition hover:bg-[var(--ns-surface-hover)] @md:inline-flex @4xl:px-3"
                   >
                     <UserPlus aria-hidden="true" className="h-3.5 w-3.5" />
-                    Assumir
+                    <span className="hidden @4xl:inline">Assumir</span>
                   </button>
                 )}
-                <div className="relative" ref={transferenciaRef}>
+                <div className="relative hidden @md:block" ref={transferenciaRef}>
                   <button
                     type="button"
                     onClick={() => setTransferenciaAberta((v) => !v)}
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--ns-border)] px-3 py-1.5 text-xs font-medium text-[var(--ns-text)] transition hover:bg-[var(--ns-surface-hover)]"
+                    title="Transferir"
+                    className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-[var(--ns-border)] px-2 text-xs font-medium text-[var(--ns-text)] transition hover:bg-[var(--ns-surface-hover)] @4xl:px-3"
                   >
                     <Users2 aria-hidden="true" className="h-3.5 w-3.5" />
-                    Transferir
+                    <span className="hidden @4xl:inline">Transferir</span>
                   </button>
                   {transferenciaAberta && (
-                    <div className="absolute right-0 z-10 mt-1 w-56 rounded-lg border border-[var(--ns-border)] bg-[var(--ns-surface)] p-1.5 shadow-lg">
+                    <div className="absolute right-0 z-30 mt-1 max-h-[60vh] w-56 overflow-y-auto rounded-lg border border-[var(--ns-border)] bg-[var(--ns-surface)] p-1.5 shadow-lg">
                       {usuariosEmpresa
                         .filter((u) => u.id !== conversaSelecionada.assigned_user_profile_id)
                         .map((u) => (
@@ -1005,12 +1098,81 @@ export function AtendimentoWorkspaceReal({
                 <button
                   type="button"
                   onClick={handleConcluirOuReabrir}
-                  className="rounded-lg bg-[var(--ns-primary)] px-3 py-1.5 text-xs font-medium text-[var(--ns-primary-foreground)] transition hover:opacity-90"
+                  className="h-8 shrink-0 rounded-lg bg-[var(--ns-primary)] px-2.5 text-xs font-medium text-[var(--ns-primary-foreground)] transition hover:opacity-90 @lg:px-3"
                 >
                   {conversaSelecionada.status === "encerrada" ? "Reabrir" : "Concluir"}
                 </button>
+                <div className="relative @md:hidden">
+                  <button
+                    type="button"
+                    onClick={() => setMenuMaisAberto((v) => !v)}
+                    aria-label="Mais ações"
+                    className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-[var(--ns-border)] text-[var(--ns-text)]"
+                  >
+                    <MoreVertical aria-hidden="true" className="h-4 w-4" />
+                  </button>
+                  {menuMaisAberto && (
+                    <>
+                      <button type="button" aria-label="Fechar menu" onClick={() => setMenuMaisAberto(false)} className="fixed inset-0 z-30 cursor-default" />
+                      <div className="absolute right-0 z-40 mt-1 max-h-[70vh] w-60 overflow-y-auto rounded-xl border border-[var(--ns-border)] bg-[var(--ns-surface)] p-1.5 text-sm shadow-xl">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setMenuMaisAberto(false);
+                            setBuscaNaConversaAberta(true);
+                          }}
+                          className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2.5 text-left text-[var(--ns-text)] hover:bg-[var(--ns-surface-hover)]"
+                        >
+                          <Search aria-hidden="true" className="h-4 w-4" /> Buscar nesta conversa
+                        </button>
+                        {!conversaSelecionada.assigned_user_profile_id && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setMenuMaisAberto(false);
+                              void handleAssumir();
+                            }}
+                            className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2.5 text-left text-[var(--ns-text)] hover:bg-[var(--ns-surface-hover)]"
+                          >
+                            <UserPlus aria-hidden="true" className="h-4 w-4" /> Assumir conversa
+                          </button>
+                        )}
+                        <p className="flex items-center gap-2 px-2.5 pb-1 pt-2.5 text-[11px] font-semibold uppercase tracking-wide text-[var(--ns-text-secondary)]">
+                          <Users2 aria-hidden="true" className="h-3.5 w-3.5" /> Transferir para
+                        </p>
+                        {usuariosEmpresa
+                          .filter((u) => u.id !== conversaSelecionada.assigned_user_profile_id)
+                          .map((u) => (
+                            <button
+                              key={u.id}
+                              type="button"
+                              onClick={() => {
+                                setMenuMaisAberto(false);
+                                void handleTransferir(u);
+                              }}
+                              className="block w-full rounded-lg px-2.5 py-2 text-left text-[var(--ns-text)] hover:bg-[var(--ns-surface-hover)]"
+                            >
+                              {u.full_name ?? u.id}
+                            </button>
+                          ))}
+                      </div>
+                    </>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setPainelAberto(true)}
+                  title="Dados do cliente e do atendimento"
+                  aria-label="Dados do cliente e do atendimento"
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-[var(--ns-border)] text-[var(--ns-text)] transition hover:bg-[var(--ns-surface-hover)] xl:hidden"
+                >
+                  <Info aria-hidden="true" className="h-3.5 w-3.5" />
+                </button>
               </div>
             </div>
+            {buscaNaConversaAberta && (
+              <BuscaNaConversa onBuscar={buscarNaConversa} onIr={(id) => void irPara(id)} onFechar={() => setBuscaNaConversaAberta(false)} />
+            )}
 
             <div
               ref={areaMensagensRef}
@@ -1021,7 +1183,7 @@ export function AtendimentoWorkspaceReal({
               // "load" de imagem/vídeo não borbulha — captura pega quando a mídia termina e muda a altura.
               onLoadCapture={rolarParaOFim}
               onLoadedMetadataCapture={rolarParaOFim}
-              className="flex-1 space-y-3 overflow-y-auto px-4 py-4"
+              className="flex-1 space-y-3 overflow-y-auto px-2 py-3 sm:px-4 sm:py-4"
             >
               {erroMensagens && (
                 <p className="mx-auto max-w-md rounded-lg border border-[var(--ns-danger)]/40 bg-[var(--ns-danger)]/10 px-3 py-2 text-xs text-[var(--ns-danger)]">
@@ -1064,13 +1226,16 @@ export function AtendimentoWorkspaceReal({
                   canalProvider: conversaSelecionada?.channel?.provider ?? null,
                 });
                 const editando = editandoId === mensagem.id;
+                const citada = mensagem.reply_to_message_id ? (mensagens.find((m) => m.id === mensagem.reply_to_message_id) ?? null) : null;
+                const destacada = destaqueId === mensagem.id ? "ring-2 ring-[var(--ns-primary)] ring-offset-2 ring-offset-[var(--ns-bg)]" : "";
 
                 if (mensagem.is_internal_note) {
                   return (
                     <Fragment key={mensagem.id}>
                     {separadorDia}
                     <div
-                      className={`mx-auto flex max-w-md items-start gap-2 rounded-lg border px-3 py-2 text-xs text-[var(--ns-text)] ${
+                      id={`msg-${mensagem.id}`}
+                      className={`mx-auto flex max-w-md items-start gap-2 rounded-lg border px-3 py-2 text-xs text-[var(--ns-text)] transition ${destacada} ${
                         apagada ? "border-[var(--ns-danger)]/40 bg-[var(--ns-danger)]/10" : "border-[var(--ns-warning)]/40 bg-[var(--ns-warning)]/10"
                       }`}
                     >
@@ -1088,6 +1253,14 @@ export function AtendimentoWorkspaceReal({
                             onApagar={() => handleApagarMensagem(mensagem)}
                           />
                         </p>
+                        {mensagem.reply_to_message_id && (
+                          <CitacaoNaBolha
+                            autor={citada ? autorDaMensagem(citada) : "Mensagem anterior"}
+                            texto={citada?.body ?? "Toque para ver"}
+                            claro={false}
+                            onClick={() => void irPara(mensagem.reply_to_message_id!)}
+                          />
+                        )}
                         {editando ? (
                           <EditorMensagem
                             textoInicial={mensagem.body ?? ""}
@@ -1095,10 +1268,11 @@ export function AtendimentoWorkspaceReal({
                             onCancelar={() => setEditandoId(null)}
                           />
                         ) : (
-                          <p className={`whitespace-pre-wrap text-[var(--ns-text-secondary)] ${apagada ? "italic opacity-80" : ""}`}>{corpoSemAssinaturaAntiga(mensagem)}</p>
+                          <p className={`whitespace-pre-wrap break-words text-[var(--ns-text-secondary)] ${apagada ? "italic opacity-80" : ""}`}>{corpoSemAssinaturaAntiga(mensagem)}</p>
                         )}
                         <HistoricoRevisoes revisoes={revisoes} claro={false} />
-                        <p className="mt-0.5 text-right text-[10px] text-[var(--ns-text-secondary)]">
+                        <p className="mt-0.5 flex items-center justify-end gap-1.5 text-[10px] text-[var(--ns-text-secondary)]">
+                          {!apagada && <BotaoResponder claro={false} onClick={() => setRespondendo(mensagem)} />}
                           {remetenteDe(mensagem)} · {horaCurta(mensagem.created_at)}
                         </p>
                       </div>
@@ -1121,7 +1295,8 @@ export function AtendimentoWorkspaceReal({
                       </span>
                     )}
                     <div
-                      className={`max-w-[70%] rounded-2xl px-3 py-2 text-sm ${
+                      id={`msg-${mensagem.id}`}
+                      className={`max-w-[85%] rounded-2xl px-3 py-2 text-sm transition md:max-w-[70%] ${destacada} ${
                         apagada
                           ? "border border-dashed border-[var(--ns-danger)]/60 bg-[var(--ns-danger)]/10 text-[var(--ns-text)]"
                           : doCliente
@@ -1130,6 +1305,14 @@ export function AtendimentoWorkspaceReal({
                       }`}
                     >
                       {apagada && <AvisoMensagemApagada mensagem={mensagem} revisoes={revisoes} />}
+                      {mensagem.reply_to_message_id && (
+                        <CitacaoNaBolha
+                          autor={citada ? autorDaMensagem(citada) : "Mensagem anterior"}
+                          texto={citada?.body ?? "Toque para ver"}
+                          claro={!doCliente && !apagada}
+                          onClick={() => void irPara(mensagem.reply_to_message_id!)}
+                        />
+                      )}
                       {TIPOS_COM_ARQUIVO.has(mensagem.message_type) && (
                         <ArquivoDaMensagem
                           tipo={mensagem.message_type}
@@ -1146,7 +1329,7 @@ export function AtendimentoWorkspaceReal({
                       ) : (
                         corpoSemAssinaturaAntiga(mensagem) && (
                           <p
-                            className={`whitespace-pre-wrap ${TIPOS_COM_ARQUIVO.has(mensagem.message_type) ? "mt-1" : ""} ${apagada ? "italic opacity-80" : ""}`}
+                            className={`whitespace-pre-wrap break-words ${TIPOS_COM_ARQUIVO.has(mensagem.message_type) ? "mt-1" : ""} ${apagada ? "italic opacity-80" : ""}`}
                           >
                             {corpoSemAssinaturaAntiga(mensagem)}
                           </p>
@@ -1170,9 +1353,7 @@ export function AtendimentoWorkspaceReal({
                           </button>
                         )}
                         {!doCliente && mensagem.status === "pendente" && <span>enviando...</span>}
-                        {!doCliente && (mensagem.status === "enviada" || mensagem.status === "entregue" || mensagem.status === "lida") && (
-                          <Check aria-hidden="true" className="h-3 w-3" />
-                        )}
+                        {!apagada && <BotaoResponder claro={!doCliente} onClick={() => setRespondendo(mensagem)} />}
                         <AcoesMensagem
                           podeEditar={podeEditar && !editando}
                           podeApagar={podeApagar && !editando}
@@ -1182,6 +1363,10 @@ export function AtendimentoWorkspaceReal({
                           onApagar={() => handleApagarMensagem(mensagem)}
                         />
                         <span>{horaCurta(mensagem.created_at)}</span>
+                        {/* ✓ enviada · ✓✓ entregue · ✓✓ azul lida pelo cliente (status que o WhatsApp devolve) */}
+                        {!doCliente && (mensagem.status === "enviada" || mensagem.status === "entregue" || mensagem.status === "lida") && (
+                          <Tiques estado={mensagem.status} claro={!apagada} />
+                        )}
                       </div>
                     </div>
                   </div>
@@ -1196,10 +1381,13 @@ export function AtendimentoWorkspaceReal({
               </div>
             )}
 
-            <form onSubmit={handleEnviar} className="border-t border-[var(--ns-border)] p-3">
+            <form onSubmit={handleEnviar} className="border-t border-[var(--ns-border)] p-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] sm:p-3">
+              {respondendo && (
+                <BarraCitando autor={autorDaMensagem(respondendo)} texto={respondendo.body} onCancelar={() => setRespondendo(null)} />
+              )}
               {semWhatsApp && (
                 <p className="mb-2 rounded-lg bg-[var(--ns-surface-hover)] px-2.5 py-1.5 text-[11px] text-[var(--ns-text-secondary)]">
-                  O WhatsApp deste número ainda não está ligado ao CRM — aqui dá pra escrever só nota interna. Responda o cliente pelo Totalk.
+                  WhatsApp ainda não ligado ao CRM: aqui só nota interna. Responda o cliente pelo Totalk.
                 </p>
               )}
               <div className="mb-2 flex items-center gap-2">
@@ -1219,7 +1407,7 @@ export function AtendimentoWorkspaceReal({
                 >
                   Nota interna
                 </button>
-                <span className="ml-auto text-[10px] text-[var(--ns-text-secondary)]">Enter envia · Shift+Enter pula linha</span>
+                <span className="ml-auto hidden text-[10px] text-[var(--ns-text-secondary)] md:inline">Enter envia · Shift+Enter pula linha</span>
               </div>
               <div className="flex items-end gap-2">
                 <textarea
@@ -1228,21 +1416,23 @@ export function AtendimentoWorkspaceReal({
                     setRascunhos((atual) => ({ ...atual, [selecionadaId ?? ""]: event.target.value }))
                   }
                   onKeyDown={(event) => {
-                    if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
+                    // No celular, Enter pula linha (o teclado do celular não tem Shift fácil) — envia pelo botão.
+                    if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing && !ehTelaDeCelular()) {
                       event.preventDefault();
                       event.currentTarget.form?.requestSubmit();
                     }
                   }}
                   rows={Math.min(5, Math.max(1, (rascunhos[selecionadaId ?? ""] ?? "").split("\n").length))}
                   placeholder={emModoNota ? "Escreva uma nota interna..." : "Digite uma mensagem..."}
-                  className={`flex-1 resize-none rounded-lg border bg-[var(--ns-surface)] px-3 py-2 text-sm text-[var(--ns-text)] outline-none placeholder:text-[var(--ns-text-secondary)] focus-visible:ring-2 ${
+                  className={`min-w-0 flex-1 resize-none rounded-lg border bg-[var(--ns-surface)] px-3 py-2 text-base text-[var(--ns-text)] md:text-sm outline-none placeholder:text-[var(--ns-text-secondary)] focus-visible:ring-2 ${
                     emModoNota ? "border-[var(--ns-warning)]/50 focus-visible:ring-[var(--ns-warning)]" : "border-[var(--ns-border)] focus-visible:ring-[var(--ns-primary)]"
                   }`}
                 />
                 <button
                   type="submit"
                   disabled={enviando || !(rascunhos[selecionadaId ?? ""] ?? "").trim()}
-                  className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[var(--ns-primary)] text-[var(--ns-primary-foreground)] transition hover:opacity-90 disabled:opacity-50"
+                  aria-label="Enviar"
+                  className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[var(--ns-primary)] text-[var(--ns-primary-foreground)] transition hover:opacity-90 disabled:opacity-50 md:h-9 md:w-9"
                 >
                   <Send aria-hidden="true" className="h-4 w-4" />
                 </button>
@@ -1252,7 +1442,19 @@ export function AtendimentoWorkspaceReal({
         )}
       </div>
 
-      <aside className="hidden h-full w-[320px] shrink-0 flex-col overflow-y-auto border-l border-[var(--ns-border)] lg:flex">
+      {painelAberto && (
+        <button type="button" aria-label="Fechar painel" onClick={() => setPainelAberto(false)} className="fixed inset-0 z-[64] bg-black/40 xl:hidden" />
+      )}
+      <aside
+        className={`${
+          painelAberto ? "fixed inset-y-0 right-0 z-[65] flex w-[min(92vw,360px)] bg-[var(--ns-surface)] shadow-xl" : "hidden"
+        } h-full shrink-0 flex-col overflow-y-auto border-l border-[var(--ns-border)] xl:static xl:z-auto xl:flex xl:w-[320px] xl:bg-transparent xl:shadow-none`}
+      >
+        <div className="flex justify-end px-2 pt-2 xl:hidden">
+          <button type="button" onClick={() => setPainelAberto(false)} aria-label="Fechar painel" className="p-1.5 text-[var(--ns-text-secondary)]">
+            <X aria-hidden="true" className="h-4 w-4" />
+          </button>
+        </div>
         {!conversaSelecionada ? (
           <p className="p-4 text-sm text-[var(--ns-text-secondary)]">Selecione uma conversa.</p>
         ) : (
@@ -1272,15 +1474,6 @@ export function AtendimentoWorkspaceReal({
                 </div>
               </div>
               <div className="flex flex-wrap gap-1.5">
-                <span
-                  className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${
-                    conversaSelecionada.client_id
-                      ? "bg-[var(--ns-success)]/15 text-[var(--ns-success)]"
-                      : "bg-[var(--ns-warning)]/15 text-[var(--ns-warning)]"
-                  }`}
-                >
-                  {conversaSelecionada.client_id ? "Cliente cadastrado" : "Cadastro pendente"}
-                </span>
                 {conversaSelecionada.external_id && (
                   <span
                     className="rounded-full bg-[var(--ns-surface-hover)] px-2 py-0.5 text-[11px] font-medium text-[var(--ns-text-secondary)]"
@@ -1290,14 +1483,17 @@ export function AtendimentoWorkspaceReal({
                   </span>
                 )}
               </div>
-              {conversaSelecionada.client_id && (
-                <a
-                  href={`/clientes/${conversaSelecionada.client_id}`}
-                  className="mt-3 inline-block text-xs font-medium text-[var(--ns-primary)] hover:underline"
-                >
-                  Ver perfil completo do cliente →
-                </a>
-              )}
+              <VinculoCliente
+                conversationId={conversaSelecionada.id}
+                companyId={companyId}
+                clientId={conversaSelecionada.client_id}
+                nomeContato={conversaSelecionada.contact?.display_name ?? null}
+                telefoneContato={telefoneDoContato(conversaSelecionada.contact)}
+                onAlterado={(mensagem) => {
+                  mostrarAviso(mensagem);
+                  void atualizarListaEContagens();
+                }}
+              />
             </div>
 
             <section className="border-b border-[var(--ns-border)] px-4 py-3.5">

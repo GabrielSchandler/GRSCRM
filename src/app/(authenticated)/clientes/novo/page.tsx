@@ -4,7 +4,15 @@ import { createClientAction } from "@/app/(authenticated)/clientes/actions";
 import { getCurrentUserContext } from "@/lib/auth/current-user";
 import type { UserProfileOption } from "@/types/pre-sale";
 
-export default async function NovoClientePage() {
+export default async function NovoClientePage({
+  searchParams,
+}: {
+  // Vindo do atendimento ("Cadastrar cliente" na conversa): nome e celular já preenchidos.
+  searchParams?: Promise<{ nome?: string; celular?: string }>;
+}) {
+  const parametros = (await searchParams) ?? {};
+  const nomeInicial = typeof parametros.nome === "string" ? parametros.nome.slice(0, 200) : "";
+  const celularInicial = typeof parametros.celular === "string" ? parametros.celular.replace(/D/g, "").slice(0, 11) : "";
   const { role, businessArea, userProfileId, supabase, companyId } =
     await getCurrentUserContext();
   const [{ data: commercialConsultantsData }, { data: legalConsultantsData }] =
@@ -50,6 +58,8 @@ export default async function NovoClientePage() {
             submitLabel="Cadastrar cliente"
             defaultValues={{
               commercial_consultant_user_id: defaultCommercialConsultantId,
+              ...(nomeInicial ? { full_name: nomeInicial } : {}),
+              ...(celularInicial ? { phone_mobile: celularInicial } : {}),
             }}
             onSubmitAction={createClientAction}
             canReactivateDeletedClient={role === "admin"}

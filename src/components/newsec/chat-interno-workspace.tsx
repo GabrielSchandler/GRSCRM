@@ -2,16 +2,19 @@
 
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { FileText, ImageIcon, Mic, Paperclip, Plus, Send, Square, Trash2, Users, X } from "lucide-react";
+import { ArrowLeft, FileText, ImageIcon, LogOut, Mic, Paperclip, Plus, Search, Send, Square, Trash2, UserMinus, UserPlus, Users, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/browser";
 import { definirFoco } from "@/lib/newsec/notificacoes";
+import { BarraCitando, BotaoResponder, BuscaNaConversa, CitacaoNaBolha, ehTelaDeCelular, irAteMensagem, Tiques, type ResultadoBusca } from "./chat-comum";
 import {
   abrirConversaDiretaAction,
+  adicionarMembrosGrupoAction,
   criarGrupoInternoAction,
   enviarMensagemInternaAction,
   marcarConversaInternaLidaAction,
   obterArquivosInternosAction,
   prepararEnvioArquivoAction,
+  removerMembroGrupoAction,
   type AnexoParaEnviar,
   type ArquivoInterno,
 } from "@/app/(newsec)/chat-interno/actions";
@@ -25,8 +28,17 @@ type ConversaInterna = {
   last_message_preview: string | null;
   nao_lidas: number;
   membros: Membro[];
+  criado_por?: string | null; // 0011
 };
-type MensagemInterna = { id: string; thread_id: string; author_user_profile_id: string | null; body: string | null; created_at: string };
+type MensagemInterna = {
+  id: string;
+  thread_id: string;
+  author_user_profile_id: string | null;
+  body: string | null;
+  created_at: string;
+  reply_to_message_id?: string | null; // 0011 — citação
+  sistema?: boolean; // 0011 — aviso automático ("Fulano adicionou Beltrano")
+};
 type Pendente = { id: string; arquivo: File; previa: string | null };
 
 const TAMANHO_MAXIMO = 50 * 1024 * 1024;
@@ -95,6 +107,12 @@ export function ChatInternoWorkspace({ userProfileId }: { userProfileId: string 
   const [gravandoDesde, setGravandoDesde] = useState<number | null>(null);
   const [agora, setAgora] = useState(Date.now());
   const [arrastando, setArrastando] = useState(false);
+  const [respondendo, setRespondendo] = useState<MensagemInterna | null>(null);
+  const [buscaAberta, setBuscaAberta] = useState(false);
+  const [destaqueId, setDestaqueId] = useState<string | null>(null);
+  const [participantesAberto, setParticipantesAberto] = useState(false);
+  // Quando cada participante leu a conversa pela última vez — base do "visto".
+  const [leituras, setLeituras] = useState<Record<string, string>>({});
 
   const conversaPedidaRef = useRef<string | null>(null);
   const areaRef = useRef<HTMLDivElement | null>(null);
@@ -132,6 +150,15 @@ export function ChatInternoWorkspace({ userProfileId }: { userProfileId: string 
     void marcarConversaInternaLidaAction(threadId);
   }, []);
 
+  const carregarLeituras = useCallback(
+    async (threadId: string) => {
+      const { data } = await supabase.from("internal_thread_members").select("user_profile_id, last_read_at").eq("thread_id", threadId);
+      if (conversaPedidaRef.current !== threadId) return;
+      setLeituras(Object.fromEntries((data ?? []).map((l) => [l.user_profile_id as string, l.last_read_at as string])));
+    },
+    [supabase],
+  );
+
   const abrirConversa = useCallback(
     async (threadId: string) => {
       conversaPedidaRef.current = threadId;
@@ -139,10 +166,15 @@ export function ChatInternoWorkspace({ userProfileId }: { userProfileId: string 
       setSelecionadaId(threadId);
       setMensagens(null);
       setArquivos({});
+      setRespondendo(null);
+      setBuscaAberta(false);
+      setParticipantesAberto(false);
+      setLeituras({});
+      void carregarLeituras(threadId);
       marcarLida(threadId);
       const { data } = await supabase
         .from("internal_messages")
-        .select("id, thread_id, author_user_profile_id, body, created_at")
+        .select("*")
         .eq("thread_id", threadId)
         .order("created_at", { ascending: false })
         .limit(200);
@@ -151,8 +183,68 @@ export function ChatInternoWorkspace({ userProfileId }: { userProfileId: string 
       setMensagens(lista);
       await buscarArquivos(threadId, lista);
     },
-    [supabase, buscarArquivos, marcarLida],
+    [supabase, buscarArquivos, marcarLida, carregarLeituras],
   );
+
+  function voltarParaLista() {
+    conversaPedidaRef.current = null;
+    setSelecionadaId(null);
+    setMensagens(null);
+  }
+
+  const buscarNaConversa = useCallback(
+    async (termo: string): Promise<ResultadoBusca[]> => {
+      const threadId = conversaPedidaRef.current;
+      if (!threadId) return [];
+      const { data } = await supabase
+        .from("internal_messages")
+        .select("*")
+        .eq("thread_id", threadId)
+        .ilike("body", `%${termo.replace(/[%_]/g, "")}%`)
+        .order("created_at", { ascending: false })
+        .limit(30);
+      return ((data ?? []) as MensagemInterna[]).map((m) => ({
+        id: m.id,
+        texto: m.body ?? "",
+        autor: m.author_user_profile_id === userProfileId ? "Você" : (nomePorId.get(m.author_user_profile_id ?? "") ?? "Ex-participante"),
+        quando: m.created_at,
+      }));
+    },
+    [supabase, userProfileId, nomePorId],
+  );
+
+  async function irPara(id: string) {
+    const threadId = conversaPedidaRef.current;
+    if (!threadId) return;
+    setBuscaAberta(false);
+    grudadoNoFimRef.current = false;
+    if (!mensagens?.some((m) => m.id === id)) {
+      const { data: alvo } = await supabase.from("internal_messages").select("created_at").eq("id", id).maybeSingle();
+      if (!alvo) return;
+      const [antes, depois] = await Promise.all([
+        supabase.from("internal_messages").select("*").eq("thread_id", threadId).lt("created_at", alvo.created_at).order("created_at", { ascending: false }).limit(50),
+        supabase.from("internal_messages").select("*").eq("thread_id", threadId).gte("created_at", alvo.created_at).order("created_at", { ascending: true }).limit(400),
+      ]);
+      if (conversaPedidaRef.current !== threadId) return;
+      const lista = [...((antes.data ?? []) as MensagemInterna[]).reverse(), ...((depois.data ?? []) as MensagemInterna[])];
+      setMensagens(lista);
+      await buscarArquivos(threadId, lista);
+    }
+    irAteMensagem(id, setDestaqueId);
+  }
+
+  function autorDe(m: MensagemInterna) {
+    return m.author_user_profile_id === userProfileId ? "Você" : (nomePorId.get(m.author_user_profile_id ?? "") ?? "Ex-participante");
+  }
+
+  /** ✓ ninguém viu · ✓✓ cinza parte do grupo viu · ✓✓ azul todos viram. */
+  function estadoVisto(m: MensagemInterna): "enviada" | "parcial" | "lida" {
+    const outros = Object.entries(leituras).filter(([id]) => id !== userProfileId);
+    if (outros.length === 0) return "enviada";
+    const viram = outros.filter(([, lido]) => lido >= m.created_at).length;
+    if (viram === 0) return "enviada";
+    return viram === outros.length ? "lida" : "parcial";
+  }
 
   // Só o que chegou depois da última mensagem da tela.
   const buscarNovas = useCallback(async () => {
@@ -161,7 +253,7 @@ export function ChatInternoWorkspace({ userProfileId }: { userProfileId: string 
     const ultima = mensagens.at(-1)?.created_at ?? "1970-01-01T00:00:00Z";
     const { data } = await supabase
       .from("internal_messages")
-      .select("id, thread_id, author_user_profile_id, body, created_at")
+      .select("*")
       .eq("thread_id", threadId)
       .gt("created_at", ultima)
       .order("created_at", { ascending: true });
@@ -185,9 +277,13 @@ export function ChatInternoWorkspace({ userProfileId }: { userProfileId: string 
 
   const buscarNovasRef = useRef(buscarNovas);
   buscarNovasRef.current = buscarNovas;
+  const carregarLeiturasRef = useRef(carregarLeituras);
+  carregarLeiturasRef.current = carregarLeituras;
   useEffect(() => {
     const intervalo = window.setInterval(() => {
-      if (document.visibilityState === "visible") void buscarNovasRef.current();
+      if (document.visibilityState !== "visible") return;
+      void buscarNovasRef.current();
+      if (conversaPedidaRef.current) void carregarLeiturasRef.current(conversaPedidaRef.current);
     }, INTERVALO_CONVERSA_MS);
     return () => window.clearInterval(intervalo);
   }, []);
@@ -300,12 +396,13 @@ export function ChatInternoWorkspace({ userProfileId }: { userProfileId: string 
         anexos.push({ storage_path: preparo.dados.caminho, content_type: tipo, file_name: item.arquivo.name, size_bytes: item.arquivo.size, kind: tipoDoArquivo(tipo) });
       }
       setStatus(null);
-      const resultado = await enviarMensagemInternaAction(threadId, texto, anexos, chave);
+      const resultado = await enviarMensagemInternaAction(threadId, texto, anexos, chave, respondendo?.id ?? null);
       if (!resultado.ok) throw new Error(resultado.mensagem);
 
       setRascunhos((atual) => ({ ...atual, [threadId]: "" }));
       pendentes.forEach((p) => p.previa && URL.revokeObjectURL(p.previa));
       setPendentes([]);
+      setRespondendo(null);
       grudadoNoFimRef.current = true;
       await Promise.all([buscarNovas(), carregarConversas()]);
     } catch (erro) {
@@ -341,7 +438,8 @@ export function ChatInternoWorkspace({ userProfileId }: { userProfileId: string 
   return (
     <div className="flex h-full min-h-0 w-full">
       {/* Lista de conversas */}
-      <div className="flex h-full w-[300px] shrink-0 flex-col border-r border-[var(--ns-border)]">
+      {/* Celular: lista e conversa são duas telas, com "voltar". */}
+      <div className={`${conversa ? "hidden lg:flex" : "flex"} h-full w-full shrink-0 flex-col border-r border-[var(--ns-border)] lg:w-[300px]`}>
         <div className="space-y-3 border-b border-[var(--ns-border)] p-3">
           <div className="flex items-center justify-between">
             <h1 className="whitespace-nowrap text-lg font-semibold text-[var(--ns-text)]">Chat interno</h1>
@@ -420,7 +518,7 @@ export function ChatInternoWorkspace({ userProfileId }: { userProfileId: string 
 
       {/* Conversa aberta */}
       <div
-        className="relative flex h-full min-w-[420px] flex-1 flex-col"
+        className={`${conversa ? "flex" : "hidden lg:flex"} relative h-full min-w-0 flex-1 flex-col lg:min-w-[420px]`}
         onDragOver={(e) => {
           if (!conversa || !e.dataTransfer.types.includes("Files")) return;
           e.preventDefault();
@@ -447,7 +545,15 @@ export function ChatInternoWorkspace({ userProfileId }: { userProfileId: string 
           </div>
         ) : (
           <>
-            <div className="flex items-center gap-3 border-b border-[var(--ns-border)] px-4 py-3">
+            <div className="flex items-center gap-2 border-b border-[var(--ns-border)] px-2 py-2 sm:gap-3 sm:px-4 sm:py-3">
+              <button
+                type="button"
+                onClick={voltarParaLista}
+                aria-label="Voltar para a lista"
+                className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-[var(--ns-text)] hover:bg-[var(--ns-surface-hover)] lg:hidden"
+              >
+                <ArrowLeft aria-hidden="true" className="h-5 w-5" />
+              </button>
               <span
                 className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${
                   conversa.kind === "grupo" ? "bg-violet-500/15 text-violet-600 dark:text-violet-300" : "bg-[var(--ns-primary)]/15 text-[var(--ns-primary)]"
@@ -455,13 +561,41 @@ export function ChatInternoWorkspace({ userProfileId }: { userProfileId: string 
               >
                 {conversa.kind === "grupo" ? <Users aria-hidden="true" className="h-4 w-4" /> : iniciais(nomeDaConversa(conversa))}
               </span>
-              <div className="min-w-0">
+              <button
+                type="button"
+                disabled={conversa.kind !== "grupo"}
+                onClick={() => setParticipantesAberto(true)}
+                className="min-w-0 flex-1 text-left disabled:cursor-default"
+                title={conversa.kind === "grupo" ? "Ver e editar participantes" : undefined}
+              >
                 <p className="truncate text-sm font-semibold text-[var(--ns-text)]">{nomeDaConversa(conversa)}</p>
                 <p className="truncate text-xs text-[var(--ns-text-secondary)]">
                   {conversa.kind === "grupo" ? `Você, ${conversa.membros.map((m) => m.nome).join(", ")}` : "Conversa privada entre vocês dois"}
                 </p>
-              </div>
+              </button>
+              <button
+                type="button"
+                onClick={() => setBuscaAberta((v) => !v)}
+                title="Buscar nesta conversa"
+                aria-label="Buscar nesta conversa"
+                className={`inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-[var(--ns-border)] text-[var(--ns-text)] hover:bg-[var(--ns-surface-hover)] ${buscaAberta ? "bg-[var(--ns-surface-hover)]" : ""}`}
+              >
+                <Search aria-hidden="true" className="h-3.5 w-3.5" />
+              </button>
+              {conversa.kind === "grupo" && (
+                <button
+                  type="button"
+                  onClick={() => setParticipantesAberto(true)}
+                  title="Participantes"
+                  aria-label="Participantes"
+                  className="inline-flex h-8 shrink-0 items-center gap-1 rounded-lg border border-[var(--ns-border)] px-2 text-xs font-medium text-[var(--ns-text)] hover:bg-[var(--ns-surface-hover)]"
+                >
+                  <Users aria-hidden="true" className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline">{conversa.membros.length + 1}</span>
+                </button>
+              )}
             </div>
+            {buscaAberta && <BuscaNaConversa onBuscar={buscarNaConversa} onIr={(id) => void irPara(id)} onFechar={() => setBuscaAberta(false)} />}
 
             <div
               ref={areaRef}
@@ -473,7 +607,7 @@ export function ChatInternoWorkspace({ userProfileId }: { userProfileId: string 
                 const a = areaRef.current;
                 if (a && grudadoNoFimRef.current) a.scrollTop = a.scrollHeight;
               }}
-              className="flex-1 space-y-2 overflow-y-auto px-4 py-4"
+              className="flex-1 space-y-2 overflow-y-auto px-2 py-3 sm:px-4 sm:py-4"
             >
               {mensagens === null && <p className="text-center text-sm text-[var(--ns-text-secondary)]">Carregando mensagens...</p>}
               {mensagens?.length === 0 && <p className="text-center text-sm text-[var(--ns-text-secondary)]">Nenhuma mensagem ainda — diga oi.</p>}
@@ -481,16 +615,37 @@ export function ChatInternoWorkspace({ userProfileId }: { userProfileId: string 
                 const minha = m.author_user_profile_id === userProfileId;
                 const anterior = i > 0 ? mensagens[i - 1] : null;
                 const novoDia = !anterior || new Date(anterior.created_at).toDateString() !== new Date(m.created_at).toDateString();
-                const mostrarAutor = conversa.kind === "grupo" && !minha && (novoDia || anterior?.author_user_profile_id !== m.author_user_profile_id);
+                const mostrarAutor =
+                  conversa.kind === "grupo" && !minha && (novoDia || anterior?.sistema || anterior?.author_user_profile_id !== m.author_user_profile_id);
+                const citada = m.reply_to_message_id ? (mensagens.find((x) => x.id === m.reply_to_message_id) ?? null) : null;
+                const destacada = destaqueId === m.id ? "ring-2 ring-[var(--ns-primary)] ring-offset-2 ring-offset-[var(--ns-bg)]" : "";
+                const separador = novoDia && (
+                  <div className="sticky top-0 z-[1] flex justify-center py-1">
+                    <span className="rounded-full bg-[var(--ns-surface-hover)] px-2.5 py-0.5 text-[11px] font-medium text-[var(--ns-text-secondary)] shadow-sm">
+                      {rotuloDia(m.created_at)}
+                    </span>
+                  </div>
+                );
+                if (m.sistema) {
+                  return (
+                    <Fragment key={m.id}>
+                      {separador}
+                      <p id={`msg-${m.id}`} className="mx-auto w-fit max-w-[90%] rounded-full bg-[var(--ns-surface-hover)] px-3 py-1 text-center text-[11px] text-[var(--ns-text-secondary)]">
+                        {m.body} · {horaCurta(m.created_at)}
+                      </p>
+                    </Fragment>
+                  );
+                }
+                // "Visto por …" só embaixo da MINHA última mensagem de um grupo (como no WhatsApp).
+                const ultimaMinha = minha && conversa.kind === "grupo" && !mensagens.slice(i + 1).some((x) => x.author_user_profile_id === userProfileId && !x.sistema);
+                const quemViu = ultimaMinha
+                  ? Object.entries(leituras)
+                      .filter(([id, lido]) => id !== userProfileId && lido >= m.created_at)
+                      .map(([id]) => nomePorId.get(id)?.split(" ")[0] ?? "alguém")
+                  : [];
                 return (
                   <Fragment key={m.id}>
-                    {novoDia && (
-                      <div className="sticky top-0 z-[1] flex justify-center py-1">
-                        <span className="rounded-full bg-[var(--ns-surface-hover)] px-2.5 py-0.5 text-[11px] font-medium text-[var(--ns-text-secondary)] shadow-sm">
-                          {rotuloDia(m.created_at)}
-                        </span>
-                      </div>
-                    )}
+                    {separador}
                     <div className={`flex flex-col ${minha ? "items-end" : "items-start"}`}>
                       {mostrarAutor && (
                         <span className="mb-0.5 px-1 text-[10px] font-medium text-[var(--ns-text-secondary)]">
@@ -498,10 +653,19 @@ export function ChatInternoWorkspace({ userProfileId }: { userProfileId: string 
                         </span>
                       )}
                       <div
-                        className={`max-w-[70%] rounded-2xl px-3 py-2 text-sm ${
+                        id={`msg-${m.id}`}
+                        className={`max-w-[85%] rounded-2xl px-3 py-2 text-sm transition md:max-w-[70%] ${destacada} ${
                           minha ? "bg-[var(--ns-primary)] text-[var(--ns-primary-foreground)]" : "bg-[var(--ns-surface-hover)] text-[var(--ns-text)]"
                         }`}
                       >
+                        {m.reply_to_message_id && (
+                          <CitacaoNaBolha
+                            autor={citada ? autorDe(citada) : "Mensagem anterior"}
+                            texto={citada ? (citada.body ?? "Arquivo") : "Toque para ver"}
+                            claro={minha}
+                            onClick={() => void irPara(m.reply_to_message_id!)}
+                          />
+                        )}
                         {(arquivos[m.id] ?? []).length > 0 && (
                           <div className="mb-1 flex flex-col gap-1.5">
                             {arquivos[m.id].map((a) => (
@@ -510,10 +674,17 @@ export function ChatInternoWorkspace({ userProfileId }: { userProfileId: string 
                           </div>
                         )}
                         {m.body && <p className="whitespace-pre-wrap break-words">{m.body}</p>}
-                        <p className={`mt-0.5 text-right text-[10px] ${minha ? "text-[var(--ns-primary-foreground)]/70" : "text-[var(--ns-text-secondary)]"}`}>
+                        <p className={`mt-0.5 flex items-center justify-end gap-1.5 text-[10px] ${minha ? "text-[var(--ns-primary-foreground)]/70" : "text-[var(--ns-text-secondary)]"}`}>
+                          <BotaoResponder claro={minha} onClick={() => setRespondendo(m)} />
                           {horaCurta(m.created_at)}
+                          {minha && <Tiques estado={estadoVisto(m)} claro />}
                         </p>
                       </div>
+                      {quemViu.length > 0 && (
+                        <span className="mt-0.5 px-1 text-[10px] text-[var(--ns-text-secondary)]">
+                          Visto por {quemViu.length === conversa.membros.length ? "todos" : quemViu.join(", ")}
+                        </span>
+                      )}
                     </div>
                   </Fragment>
                 );
@@ -521,8 +692,9 @@ export function ChatInternoWorkspace({ userProfileId }: { userProfileId: string 
             </div>
 
             {/* Compositor */}
-            <div className="border-t border-[var(--ns-border)] p-3">
+            <div className="border-t border-[var(--ns-border)] p-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] sm:p-3">
               {status && <p className="mb-2 text-xs text-[var(--ns-text-secondary)]" role="status">{status}</p>}
+              {respondendo && <BarraCitando autor={autorDe(respondendo)} texto={respondendo.body} onCancelar={() => setRespondendo(null)} />}
               {pendentes.length > 0 && (
                 <div className="mb-2 flex flex-wrap gap-2">
                   {pendentes.map((p) => (
@@ -584,7 +756,8 @@ export function ChatInternoWorkspace({ userProfileId }: { userProfileId: string 
                     value={rascunhos[conversa.thread_id] ?? ""}
                     onChange={(e) => setRascunhos((atual) => ({ ...atual, [conversa.thread_id]: e.target.value }))}
                     onKeyDown={(e) => {
-                      if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+                      // No celular, Enter pula linha; envia pelo botão.
+                      if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing && !ehTelaDeCelular()) {
                         e.preventDefault();
                         void enviar();
                       }
@@ -597,8 +770,9 @@ export function ChatInternoWorkspace({ userProfileId }: { userProfileId: string 
                       }
                     }}
                     rows={Math.min(5, Math.max(1, (rascunhos[conversa.thread_id] ?? "").split("\n").length))}
-                    placeholder="Mensagem (Enter envia · Shift+Enter pula linha · cole ou arraste imagens)"
-                    className="flex-1 resize-none rounded-lg border border-[var(--ns-border)] bg-[var(--ns-surface)] px-3 py-2 text-sm text-[var(--ns-text)] outline-none placeholder:text-[var(--ns-text-secondary)] focus-visible:ring-2 focus-visible:ring-[var(--ns-primary)]"
+                    placeholder="Mensagem"
+                    title="Enter envia · Shift+Enter pula linha · dá pra colar ou arrastar imagens"
+                    className="min-w-0 flex-1 resize-none rounded-lg border border-[var(--ns-border)] bg-[var(--ns-surface)] px-3 py-2 text-base md:text-sm text-[var(--ns-text)] outline-none placeholder:text-[var(--ns-text-secondary)] focus-visible:ring-2 focus-visible:ring-[var(--ns-primary)]"
                   />
                   {(rascunhos[conversa.thread_id] ?? "").trim() || pendentes.length > 0 ? (
                     <button
@@ -626,6 +800,22 @@ export function ChatInternoWorkspace({ userProfileId }: { userProfileId: string 
         )}
       </div>
 
+      {participantesAberto && conversa?.kind === "grupo" && (
+        <ModalParticipantes
+          conversa={conversa}
+          userProfileId={userProfileId}
+          onFechar={() => setParticipantesAberto(false)}
+          onAlterado={async (saiu) => {
+            await carregarConversas();
+            if (saiu) {
+              setParticipantesAberto(false);
+              voltarParaLista();
+            } else {
+              await buscarNovas();
+            }
+          }}
+        />
+      )}
       {modal && (
         <ModalNovaConversa
           tipo={modal}
@@ -781,6 +971,159 @@ function ModalNovaConversa({
             </button>
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+/** Participantes de um grupo: adicionar (qualquer um), remover (só quem criou) e sair do grupo. */
+function ModalParticipantes({
+  conversa,
+  userProfileId,
+  onFechar,
+  onAlterado,
+}: {
+  conversa: ConversaInterna;
+  userProfileId: string;
+  onFechar: () => void;
+  onAlterado: (saiu: boolean) => Promise<void>;
+}) {
+  const supabase = useMemo(() => createClient(), []);
+  const [adicionando, setAdicionando] = useState(false);
+  const [colegas, setColegas] = useState<Membro[] | null>(null);
+  const [escolhidos, setEscolhidos] = useState<Set<string>>(new Set());
+  const [erro, setErro] = useState<string | null>(null);
+  const [salvando, setSalvando] = useState(false);
+  const souCriador = conversa.criado_por === userProfileId;
+
+  useEffect(() => {
+    const esc = (e: KeyboardEvent) => e.key === "Escape" && onFechar();
+    document.addEventListener("keydown", esc);
+    return () => document.removeEventListener("keydown", esc);
+  }, [onFechar]);
+
+  useEffect(() => {
+    if (!adicionando || colegas) return;
+    supabase.rpc("listar_colegas_chat_interno").then(({ data }) => {
+      const jaEstao = new Set(conversa.membros.map((m) => m.id));
+      setColegas(((data ?? []) as Membro[]).filter((c) => !jaEstao.has(c.id)));
+    });
+  }, [adicionando, colegas, supabase, conversa.membros]);
+
+  async function executar(acao: () => Promise<{ ok: boolean; mensagem?: string }>, saiu = false) {
+    setSalvando(true);
+    setErro(null);
+    const r = await acao();
+    setSalvando(false);
+    if (!r.ok) return setErro(r.mensagem ?? "Não deu certo.");
+    await onAlterado(saiu);
+    setAdicionando(false);
+    setEscolhidos(new Set());
+    setColegas(null);
+  }
+
+  return (
+    <div className="fixed inset-0 z-[80] flex items-end justify-center bg-black/40 sm:items-center sm:p-4" onMouseDown={(e) => e.target === e.currentTarget && onFechar()}>
+      <div className="flex max-h-[85vh] w-full flex-col rounded-t-2xl border border-[var(--ns-border)] bg-[var(--ns-surface)] shadow-xl sm:max-w-sm sm:rounded-xl">
+        <div className="flex items-center justify-between border-b border-[var(--ns-border)] px-4 py-3">
+          <h2 className="truncate text-sm font-semibold text-[var(--ns-text)]">{conversa.title ?? "Grupo"} · {conversa.membros.length + 1} pessoas</h2>
+          <button type="button" onClick={onFechar} aria-label="Fechar" className="p-1 text-[var(--ns-text-secondary)]">
+            <X aria-hidden="true" className="h-4 w-4" />
+          </button>
+        </div>
+        <ul className="min-h-0 flex-1 overflow-y-auto px-2 py-2">
+          <li className="flex items-center gap-2 rounded-lg px-2 py-2 text-sm text-[var(--ns-text)]">
+            <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[var(--ns-primary)]/15 text-[10px] font-semibold text-[var(--ns-primary)]">EU</span>
+            <span className="flex-1">Você{souCriador ? " · criou o grupo" : ""}</span>
+          </li>
+          {conversa.membros.map((m) => (
+            <li key={m.id} className="flex items-center gap-2 rounded-lg px-2 py-2 text-sm text-[var(--ns-text)]">
+              <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[var(--ns-primary)]/15 text-[10px] font-semibold text-[var(--ns-primary)]">
+                {iniciais(m.nome ?? "?")}
+              </span>
+              <span className="min-w-0 flex-1 truncate">
+                {m.nome}
+                {conversa.criado_por === m.id ? " · criou o grupo" : ""}
+              </span>
+              {souCriador && (
+                <button
+                  type="button"
+                  disabled={salvando}
+                  onClick={() =>
+                    window.confirm(`Remover ${m.nome ?? "esta pessoa"} do grupo?`) &&
+                    void executar(() => removerMembroGrupoAction(conversa.thread_id, m.id).then((r) => (r.ok ? { ok: true } : r)))
+                  }
+                  title="Remover do grupo"
+                  className="inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-xs text-[var(--ns-text-secondary)] hover:text-[var(--ns-danger)]"
+                >
+                  <UserMinus aria-hidden="true" className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline">Remover</span>
+                </button>
+              )}
+            </li>
+          ))}
+        </ul>
+
+        {adicionando && (
+          <div className="max-h-56 overflow-y-auto border-t border-[var(--ns-border)] px-2 py-2">
+            {colegas === null && <p className="px-2 py-2 text-xs text-[var(--ns-text-secondary)]">Carregando...</p>}
+            {colegas?.length === 0 && <p className="px-2 py-2 text-xs text-[var(--ns-text-secondary)]">Todo mundo da empresa já está no grupo.</p>}
+            {colegas?.map((c) => (
+              <label key={c.id} className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-2 text-sm text-[var(--ns-text)] hover:bg-[var(--ns-surface-hover)]">
+                <input
+                  type="checkbox"
+                  checked={escolhidos.has(c.id)}
+                  onChange={(e) =>
+                    setEscolhidos((atual) => {
+                      const novo = new Set(atual);
+                      if (e.target.checked) novo.add(c.id);
+                      else novo.delete(c.id);
+                      return novo;
+                    })
+                  }
+                />
+                {c.nome}
+              </label>
+            ))}
+          </div>
+        )}
+
+        {erro && <p className="px-4 pb-2 text-xs text-[var(--ns-danger)]">{erro}</p>}
+        <div className="flex flex-wrap gap-2 border-t border-[var(--ns-border)] p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+          {adicionando ? (
+            <button
+              type="button"
+              disabled={salvando || escolhidos.size === 0}
+              onClick={() =>
+                void executar(() =>
+                  adicionarMembrosGrupoAction(conversa.thread_id, [...escolhidos]).then((r) => (r.ok ? { ok: true } : r)),
+                )
+              }
+              className="flex-1 rounded-lg bg-[var(--ns-primary)] px-3 py-2 text-sm font-medium text-[var(--ns-primary-foreground)] disabled:opacity-50"
+            >
+              Adicionar {escolhidos.size > 0 ? `(${escolhidos.size})` : ""}
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setAdicionando(true)}
+              className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-[var(--ns-primary)] px-3 py-2 text-sm font-medium text-[var(--ns-primary-foreground)]"
+            >
+              <UserPlus aria-hidden="true" className="h-4 w-4" /> Adicionar pessoas
+            </button>
+          )}
+          <button
+            type="button"
+            disabled={salvando}
+            onClick={() =>
+              window.confirm("Sair deste grupo? Você deixa de ver as mensagens dele.") &&
+              void executar(() => removerMembroGrupoAction(conversa.thread_id, userProfileId).then((r) => (r.ok ? { ok: true } : r)), true)
+            }
+            className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-[var(--ns-border)] px-3 py-2 text-sm text-[var(--ns-danger)] hover:bg-[var(--ns-danger)]/10"
+          >
+            <LogOut aria-hidden="true" className="h-4 w-4" /> Sair
+          </button>
+        </div>
       </div>
     </div>
   );

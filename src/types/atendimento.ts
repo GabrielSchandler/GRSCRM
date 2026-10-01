@@ -69,6 +69,8 @@ export type Message = {
   edited_at?: string | null;
   deleted_at?: string | null;
   deleted_by_user_profile_id?: string | null;
+  // 0011 — mensagem citada (responder citando).
+  reply_to_message_id?: string | null;
 };
 
 /** Edição/exclusão de mensagem e a confirmação do WhatsApp (tabela message_revisions, 0009). */

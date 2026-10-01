@@ -20,7 +20,8 @@ export default async function NewSecLayout({ children }: { children: React.React
     >
       <ThemeScript />
 
-      <div className="flex w-[200px] shrink-0 flex-col border-r border-[var(--ns-border)] bg-[var(--ns-surface)]">
+      {/* No celular a barra lateral vira gaveta (MenuMobile, na barra do topo). */}
+      <div className="hidden w-[200px] shrink-0 flex-col border-r border-[var(--ns-border)] bg-[var(--ns-surface)] md:flex">
         <div className="flex items-center gap-2 px-4 py-4">
           <div className="flex h-7 w-7 items-center justify-center rounded-md bg-[var(--ns-primary)] text-xs font-bold text-[var(--ns-primary-foreground)]">
             N

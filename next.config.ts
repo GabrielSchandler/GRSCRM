@@ -38,7 +38,8 @@ const securityHeaders = [
     key: "Permissions-Policy",
     value: [
       "accelerometer=()",
-      "autoplay=()",
+      // Som de aviso de mensagem nova (01/10/2026) — só o próprio site.
+      "autoplay=(self)",
       "bluetooth=()",
       "camera=()",
       "display-capture=()",
@@ -47,7 +48,8 @@ const securityHeaders = [
       "geolocation=()",
       "gyroscope=()",
       "magnetometer=()",
-      "microphone=()",
+      // Gravar áudio no chat interno (01/10/2026) — só o próprio site; o navegador ainda pede permissão.
+      "microphone=(self)",
       "midi=()",
       "payment=()",
       "picture-in-picture=()",

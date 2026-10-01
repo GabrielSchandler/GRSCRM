@@ -1,8 +1,13 @@
 import Link from "next/link";
 import { ThemeScript } from "@/components/newsec/theme-script";
 import { NewSecSidebarNav } from "@/components/newsec/sidebar-nav";
+import { Notificador } from "@/components/newsec/notificador";
+import { getCurrentUserContext } from "@/lib/auth/current-user";
 
-export default function NewSecLayout({ children }: { children: React.ReactNode }) {
+export default async function NewSecLayout({ children }: { children: React.ReactNode }) {
+  // Pro avisador de mensagens (som/aviso/título) — roda em todas as telas do shell novo.
+  const { userProfileId, companyId } = await getCurrentUserContext();
+
   return (
     <div
       id="ns-shell-root"
@@ -33,6 +38,7 @@ export default function NewSecLayout({ children }: { children: React.ReactNode }
       </div>
 
       <div className="flex min-w-0 flex-1 flex-col bg-[var(--ns-bg)]">{children}</div>
+      <Notificador userProfileId={userProfileId} companyId={companyId} />
     </div>
   );
 }

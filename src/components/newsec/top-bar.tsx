@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { Bell, Search } from "lucide-react";
+import { Search } from "lucide-react";
+import { SinoNotificacoes } from "./sino-notificacoes";
 import { ThemeToggle } from "./theme-toggle";
 
 export function TopBar({
@@ -38,13 +39,7 @@ export function TopBar({
         />
       </div>
       <div className="ml-auto flex items-center gap-2">
-        <button
-          type="button"
-          title="Notificações (demonstração)"
-          className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-[var(--ns-border)] text-[var(--ns-text-secondary)] transition hover:bg-[var(--ns-surface-hover)]"
-        >
-          <Bell aria-hidden="true" className="h-4 w-4" />
-        </button>
+        <SinoNotificacoes />
         <ThemeToggle />
         <div className="flex items-center gap-2 rounded-lg border border-[var(--ns-border)] px-2 py-1.5">
           <div className="flex h-6 w-6 items-center justify-center rounded-full bg-[var(--ns-primary)]/15 text-[10px] font-semibold text-[var(--ns-primary)]">

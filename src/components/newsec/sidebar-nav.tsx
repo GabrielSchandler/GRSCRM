@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
+  MessageCircle,
   MessagesSquare,
   Users,
   Briefcase,
@@ -34,6 +35,7 @@ type NavItem = {
  */
 const ITEMS: NavItem[] = [
   { href: "/atendimento", label: "Atendimento", icon: MessagesSquare, disponivel: true },
+  { href: "/chat-interno", label: "Chat interno", icon: MessageCircle, disponivel: true },
   { href: "/clientes", label: "Clientes", icon: Users, disponivel: true, externo: true },
   { href: "/comercial", label: "Comercial", icon: Briefcase, disponivel: true, externo: true },
   { href: "/juridico", label: "Jurídico", icon: Scale, disponivel: true, externo: true },

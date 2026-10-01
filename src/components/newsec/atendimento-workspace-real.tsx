@@ -2,7 +2,9 @@
 
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle, Bot, Check, FileText, RefreshCw, Send, StickyNote, UserPlus, Users2 } from "lucide-react";
+import { useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/browser";
+import { definirFoco } from "@/lib/newsec/notificacoes";
 import type { ConversaEstado, ConversationStatus, Message, MessageRevision } from "@/types/atendimento";
 import { AcoesMensagem, AvisoMensagemApagada, EditorMensagem, HistoricoRevisoes, permissoesDaMensagem } from "./mensagem-revisoes";
 import {
@@ -600,11 +602,11 @@ export function AtendimentoWorkspaceReal({
     };
   }, []);
 
-  // Não lidas do próprio consultor no título da aba do navegador — dá pra ver de outra aba.
+  // Conversa aberta agora — o avisador não apita mensagem nova da conversa que a pessoa já está vendo.
   useEffect(() => {
-    const n = naoLidasPorAba.meus ?? 0;
-    document.title = n > 0 ? `(${n}) Atendimento · GRS` : "Atendimento · GRS";
-  }, [naoLidasPorAba.meus]);
+    definirFoco(selecionadaId ? `c:${selecionadaId}` : null);
+    return () => definirFoco(null);
+  }, [selecionadaId]);
 
   useEffect(() => {
     if (!transferenciaAberta) return;
@@ -652,6 +654,32 @@ export function AtendimentoWorkspaceReal({
     if (conversaDaLista) setConversaFixada(conversaDaLista);
   }, [conversaDaLista]);
   const conversaSelecionada = conversaDaLista ?? (conversaFixada?.id === selecionadaId ? conversaFixada : null);
+
+  // Clique num aviso (/atendimento?c=<id>): abre aquela conversa, mesmo que não esteja na lista carregada.
+  // Conta como "o dono abriu" — a pessoa clicou pra ver.
+  const conversaPedidaNaUrl = useSearchParams().get("c");
+  useEffect(() => {
+    if (!conversaPedidaNaUrl) return;
+    let cancelado = false;
+    supabase
+      .from("conversations")
+      .select(SELECT_CONVERSAS)
+      .eq("id", conversaPedidaNaUrl)
+      .eq("ultima_mensagem.is_internal_note", false)
+      .order("created_at", { referencedTable: "ultima_mensagem", ascending: false })
+      .limit(1, { referencedTable: "ultima_mensagem" })
+      .maybeSingle()
+      .then(({ data }) => {
+        if (cancelado || !data) return;
+        const conversa = data as unknown as ConversaLista;
+        setConversaFixada(conversa);
+        abrirConversa(conversa);
+      });
+    return () => {
+      cancelado = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [conversaPedidaNaUrl]);
   // Conversa do Totalk (canal sem WhatsApp ligado ao CRM): o envio é bloqueado no servidor; a tela já
   // deixa só "Nota interna", pra ninguém digitar uma resposta e só depois descobrir que não sai.
   const semWhatsApp = conversaSelecionada?.channel?.provider === "totalk";

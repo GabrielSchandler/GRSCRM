@@ -142,7 +142,8 @@ const commercialPrefixes = ["/comercial", "/calculos", "/leads"];
 // bate em nenhum dos prefixos de area (comercial/juridico/etc) nem estava nesta lista —
 // achado revisando o codigo antes de portar, nao em teoria: quase todo consultor real da
 // GRS tem role "seller".
-const sharedOperationalPrefixes = ["/clientes", "/pre-vendas", "/documentos", "/atendimento"];
+// "/chat-interno" (01/10/2026): conversa entre funcionários, todo mundo usa — mesmo motivo do atendimento.
+const sharedOperationalPrefixes = ["/clientes", "/pre-vendas", "/documentos", "/atendimento", "/chat-interno"];
 
 export function classifyWorkspacePath(pathname: string): WorkspaceView | null {
   if (financePrefixes.some((prefix) => pathname.startsWith(prefix))) {

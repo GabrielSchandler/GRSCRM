@@ -14,37 +14,15 @@ import {
   removerAviso,
   type AvisoNotificacao,
 } from "@/lib/newsec/notificacoes";
+import { prepararAudio, tocarSomAviso } from "@/lib/newsec/som";
 
-// Roda mesmo com a aba do navegador em segundo plano — é justamente quando o aviso mais importa
-// (o navegador pode espaçar pra ~1 min nesse caso).
+// Roda mesmo com o navegador minimizado — é justamente quando o aviso mais importa.
 const INTERVALO_MS = 10_000;
 const CHAVE_PEDIDO_DISPENSADO = "ns:pedido-aviso-windows-dispensado";
 const AVISO_SOME_EM_MS = 8_000;
 
 type ConversaComNaoLida = { id: string; unread_count: number; last_message_preview: string | null; contact: { display_name: string | null } | null };
 type ConversaInterna = { thread_id: string; kind: string; title: string | null; last_message_preview: string | null; nao_lidas: number; membros: { id: string; nome: string | null }[] };
-
-/** Som curto gerado na hora (sem arquivo): dois tons — mais agudo pro chat interno. */
-function tocarSom(contexto: AudioContext | null, tipo: AvisoNotificacao["tipo"]) {
-  if (!contexto) return;
-  if (contexto.state !== "running") void contexto.resume();
-  // Marca de quando tocou (conferência/teste; não aparece na tela).
-  document.documentElement.dataset.nsUltimoSom = String(Date.now());
-  const notas = tipo === "interno" ? [880, 1175] : [660, 880];
-  notas.forEach((frequencia, indice) => {
-    const oscilador = contexto.createOscillator();
-    const volume = contexto.createGain();
-    const inicio = contexto.currentTime + indice * 0.14;
-    oscilador.type = "sine";
-    oscilador.frequency.value = frequencia;
-    volume.gain.setValueAtTime(0.0001, inicio);
-    volume.gain.exponentialRampToValueAtTime(0.18, inicio + 0.02);
-    volume.gain.exponentialRampToValueAtTime(0.0001, inicio + 0.13);
-    oscilador.connect(volume).connect(contexto.destination);
-    oscilador.start(inicio);
-    oscilador.stop(inicio + 0.14);
-  });
-}
 
 function previa(texto: string | null) {
   if (!texto) return "Nova mensagem";
@@ -58,7 +36,7 @@ function previa(texto: string | null) {
  * (comercial, jurídico...) — o aviso tem que chegar em qualquer tela (pedido do Gabriel, 01/10/2026).
  * Por isso o visual vem embrulhado em ".ns-shell": no CRM antigo as cores --ns-* não existem.
  *
- * Avisador do shell NewSec: a cada 15 s confere as conversas de WhatsApp do próprio usuário com
+ * Avisador do shell NewSec: a cada 10 s confere as conversas de WhatsApp do próprio usuário com
  * mensagem não lida e as conversas do chat interno. Quando o número de uma sobe: toca som, mostra o
  * aviso no canto da tela (clicável) e, se a pessoa permitiu, a notificação do sistema. Também põe o
  * total no título da aba do navegador.
@@ -98,18 +76,10 @@ export function Notificador({
   const router = useRouter();
   const estado = useSyncExternalStore(assinarNotificacoes, lerNotificacoes, lerNotificacoesNoServidor);
   const anteriorRef = useRef<{ whatsapp: Map<string, number>; interno: Map<string, number> } | null>(null);
-  const audioRef = useRef<AudioContext | null>(null);
 
   // O navegador só deixa tocar som depois de um clique/tecla na página: prepara o áudio no 1º gesto.
   useEffect(() => {
-    const preparar = () => {
-      try {
-        audioRef.current ??= new AudioContext();
-        void audioRef.current.resume();
-      } catch {
-        // sem suporte a áudio: segue só com aviso visual
-      }
-    };
+    const preparar = () => prepararAudio();
     window.addEventListener("pointerdown", preparar);
     window.addEventListener("keydown", preparar);
     return () => {
@@ -179,20 +149,23 @@ export function Notificador({
         }
       }
 
-      const visivel = document.visibilityState === "visible";
+      // "Olhando a tela" = aba visível E janela do navegador em primeiro plano. Minimizado, atrás de
+      // outro programa ou em outra aba: aviso do Windows (se a pessoa ativou).
+      const olhando = document.visibilityState === "visible" && document.hasFocus();
       for (const aviso of novos) {
         const chaveFoco = aviso.id.split(":").slice(0, 2).join(":");
         // Já está olhando essa conversa: não precisa de aviso.
-        if (visivel && lerFoco() === chaveFoco) continue;
+        if (olhando && lerFoco() === chaveFoco) continue;
         adicionarAviso(aviso);
         window.setTimeout(() => removerAviso(aviso.id), AVISO_SOME_EM_MS);
-        if (lerNotificacoes().somLigado) tocarSom(audioRef.current, aviso.tipo);
-        if (!visivel && "Notification" in window && Notification.permission === "granted") {
+        if (lerNotificacoes().somLigado) tocarSomAviso(aviso.tipo);
+        if (!olhando && "Notification" in window && Notification.permission === "granted") {
           try {
             const n = new Notification(aviso.tipo === "interno" ? `Chat interno · ${aviso.titulo}` : `WhatsApp · ${aviso.titulo}`, {
               body: aviso.texto,
-              tag: aviso.id.split(":").slice(0, 2).join(":"), // agrupa avisos da mesma conversa
-            });
+              tag: chaveFoco, // agrupa avisos da mesma conversa...
+              renotify: true, // ...mas avisa de novo a cada mensagem nova
+            } as NotificationOptions);
             n.onclick = () => {
               window.focus();
               router.push(aviso.href);
@@ -206,14 +179,25 @@ export function Notificador({
     }
 
     void conferir();
-    const intervalo = window.setInterval(() => void conferir(), INTERVALO_MS);
+    // O relógio roda num Web Worker: com o navegador minimizado, Chrome/Edge seguram o setInterval
+    // da página pra no máximo 1 vez por minuto, mas não seguram mensagem vinda de um worker.
+    let relogio: Worker | null = null;
+    let intervalo: number | undefined;
+    try {
+      const codigo = `setInterval(() => postMessage(0), ${INTERVALO_MS});`;
+      relogio = new Worker(URL.createObjectURL(new Blob([codigo], { type: "text/javascript" })));
+      relogio.onmessage = () => void conferir();
+    } catch {
+      intervalo = window.setInterval(() => void conferir(), INTERVALO_MS);
+    }
     const aoVoltar = () => {
       if (document.visibilityState === "visible") void conferir();
     };
     document.addEventListener("visibilitychange", aoVoltar);
     return () => {
       cancelado = true;
-      window.clearInterval(intervalo);
+      relogio?.terminate();
+      if (intervalo !== undefined) window.clearInterval(intervalo);
       document.removeEventListener("visibilitychange", aoVoltar);
     };
   }, [companyId, userProfileId, router]);

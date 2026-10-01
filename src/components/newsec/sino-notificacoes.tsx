@@ -2,7 +2,8 @@
 
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
-import { Bell, BellRing, Volume2, VolumeX } from "lucide-react";
+import { Bell, BellRing, Play, Volume2, VolumeX } from "lucide-react";
+import { tocarSomAviso } from "@/lib/newsec/som";
 import {
   assinarNotificacoes,
   atualizarNotificacoes,
@@ -111,6 +112,16 @@ export function SinoNotificacoes() {
               {estado.somLigado ? <Volume2 aria-hidden="true" className="h-3.5 w-3.5" /> : <VolumeX aria-hidden="true" className="h-3.5 w-3.5" />}
               Som de aviso: {estado.somLigado ? "ligado" : "desligado"}
             </button>
+            <div className="flex gap-1 px-1.5 pb-1 text-[11px]">
+              <span className="text-[var(--ns-text-secondary)]">Testar som:</span>
+              <button type="button" onClick={() => tocarSomAviso("whatsapp")} className="inline-flex items-center gap-0.5 font-medium text-[var(--ns-primary)] hover:underline">
+                <Play aria-hidden="true" className="h-3 w-3" /> WhatsApp
+              </button>
+              <span className="text-[var(--ns-text-secondary)]">·</span>
+              <button type="button" onClick={() => tocarSomAviso("interno")} className="inline-flex items-center gap-0.5 font-medium text-[var(--ns-primary)] hover:underline">
+                <Play aria-hidden="true" className="h-3 w-3" /> Chat interno
+              </button>
+            </div>
             {estado.permissaoNavegador === "default" && (
               <button
                 type="button"

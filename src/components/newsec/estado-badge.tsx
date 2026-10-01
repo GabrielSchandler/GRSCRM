@@ -2,8 +2,9 @@ import type { ConversaEstado } from "@/types/atendimento";
 
 const ESTADO_LABEL: Record<ConversaEstado, string> = {
   IA: "IA",
-  AGUARDANDO_HUMANO: "Aguardando você",
-  HUMANO: "Com você",
+  // Neutro de propósito: o mesmo selo aparece pra quem é o dono e pra quem supervisiona.
+  AGUARDANDO_HUMANO: "Aguardando atendente",
+  HUMANO: "Em atendimento",
   AGUARDANDO_CLIENTE: "Aguardando cliente",
   ENCERRADA: "Concluída",
 };

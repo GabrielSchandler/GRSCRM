@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { AlertTriangle, Bot, Check, FileText, Phone, RefreshCw, Send, StickyNote, UserPlus, Users2 } from "lucide-react";
+import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { AlertTriangle, Bot, Check, FileText, RefreshCw, Send, StickyNote, UserPlus, Users2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/browser";
 import type { ConversaEstado, ConversationStatus, Message, MessageRevision } from "@/types/atendimento";
 import { AcoesMensagem, AvisoMensagemApagada, EditorMensagem, HistoricoRevisoes, permissoesDaMensagem } from "./mensagem-revisoes";
@@ -21,6 +21,14 @@ import {
 } from "@/app/(newsec)/atendimento/actions";
 
 const TIPOS_COM_ARQUIVO = new Set(["audio", "imagem", "documento", "video"]);
+const POR_PAGINA_LISTA = 50;
+const POR_PAGINA_MENSAGENS = 200;
+// Sem WhatsApp em tempo real ainda: a tela confere novidades sozinha a cada 15 s (só com a aba
+// do navegador visível) — antes, mensagem nova só aparecia clicando em "Atualizar".
+const INTERVALO_ATUALIZACAO_MS = 15_000;
+// Link assinado do arquivo vale 1 h; renova antes de vencer pra áudio/imagem não quebrarem.
+const RENOVAR_LINKS_APOS_MS = 50 * 60 * 1000;
+const SELECT_MENSAGEM = "*, author:user_profiles!messages_author_user_profile_id_fkey(id, full_name)";
 const ROTULO_TIPO: Record<string, string> = { audio: "Áudio", imagem: "Imagem", documento: "Documento", video: "Vídeo" };
 import { EstadoBadge } from "./estado-badge";
 
@@ -65,13 +73,22 @@ function corpoSemAssinaturaAntiga(mensagem: MensagemComAutor): string | null {
   return mensagem.body.replace(/^\*[^*\n]{1,60}:\*\s*/, "");
 }
 
+/** Prévia da última mensagem na lista, legível: "[audio]" vira "Áudio" e tira a assinatura "*Nome:*" do Totalk. */
+function previaLegivel(preview: string | null): string {
+  if (!preview) return "—";
+  const soTipo = preview.match(/^\[(\w+)\]$/);
+  if (soTipo) return ROTULO_TIPO[soTipo[1]] ?? "Arquivo";
+  return preview.replace(/^\*[^*\n]{1,60}:\*\s*/, "");
+}
+
 /** Rótulo de quem mandou uma mensagem de saída — nunca deixa "quem enviou" implícito. */
 function remetenteDe(mensagem: MensagemComAutor): string {
   switch (mensagem.author_type) {
     case "ia":
       return "IA";
     case "humano":
-      return mensagem.author?.full_name ?? "Equipe (usuário removido)";
+      if (mensagem.author?.full_name) return mensagem.author.full_name;
+      return mensagem.external_id ? "Atendente não localizado" : "Equipe (usuário removido)";
     case "sistema":
       return "Sistema";
     default:
@@ -141,6 +158,20 @@ function horaOuData(iso: string, comHora = false) {
   return comHora ? `${dia} ${hora}` : dia;
 }
 
+function horaCurta(iso: string) {
+  return new Date(iso).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+}
+
+/** Rótulo do separador de dia na conversa: "Hoje", "Ontem" ou a data. */
+function rotuloDia(iso: string) {
+  const data = new Date(iso);
+  const hoje = new Date();
+  const ontem = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate() - 1);
+  if (data.toDateString() === hoje.toDateString()) return "Hoje";
+  if (data.toDateString() === ontem.toDateString()) return "Ontem";
+  return data.toLocaleDateString("pt-BR", { weekday: "short", day: "2-digit", month: "2-digit", year: "numeric" });
+}
+
 function formatarDataHora(iso: string | null) {
   if (!iso) return "—";
   return new Date(iso).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
@@ -161,6 +192,8 @@ export function AtendimentoWorkspaceReal({
   // A aba "IA" (conversas sem responsável, só a IA atendendo) é visível pra quem supervisiona —
   // mesmo corte de "isAdminOuManager" usado no resto da tela pra "ver toda a empresa".
   const podeVerIA = isAdminOuManager || isPlatformOwner;
+  // Consultor vê só "Meus" (pedido do Gabriel): "Outros" e "IA" são de quem supervisiona.
+  const abasVisiveis: Aba[] = podeVerIA ? ["meus", "outros", "ia"] : ["meus"];
   const [aba, setAba] = useState<Aba>("meus");
   const [subFiltro, setSubFiltro] = useState<SubFiltro>("todas");
   const [busca, setBusca] = useState("");
@@ -175,6 +208,10 @@ export function AtendimentoWorkspaceReal({
   const [contagensAbas, setContagensAbas] = useState<Record<Aba, number | null>>({ meus: null, outros: null, ia: null });
   const [erroLista, setErroLista] = useState<string | null>(null);
   const [carregandoLista, setCarregandoLista] = useState(true);
+  const [limiteLista, setLimiteLista] = useState(POR_PAGINA_LISTA);
+  const [temMaisConversas, setTemMaisConversas] = useState(false);
+  const [naoLidasPorAba, setNaoLidasPorAba] = useState<Record<Aba, number | null>>({ meus: null, outros: null, ia: null });
+  const [atualizadoEm, setAtualizadoEm] = useState<Date | null>(null);
 
   const [selecionadaId, setSelecionadaId] = useState<string | null>(null);
   const [mensagens, setMensagens] = useState<MensagemComAutor[] | null>(null);
@@ -182,6 +219,8 @@ export function AtendimentoWorkspaceReal({
   const [revisoesPorMensagem, setRevisoesPorMensagem] = useState<Record<string, MessageRevision[]>>({});
   const [editandoId, setEditandoId] = useState<string | null>(null);
   const [erroMensagens, setErroMensagens] = useState<string | null>(null);
+  const [temMensagensAnteriores, setTemMensagensAnteriores] = useState(false);
+  const [carregandoAnteriores, setCarregandoAnteriores] = useState(false);
 
   const [rascunhos, setRascunhos] = useState<Record<string, string>>({});
   const [modoNota, setModoNota] = useState(false);
@@ -189,6 +228,7 @@ export function AtendimentoWorkspaceReal({
   const [aviso, setAviso] = useState<string | null>(null);
   const [usuariosEmpresa, setUsuariosEmpresa] = useState<UsuarioEmpresa[]>([]);
   const [transferenciaAberta, setTransferenciaAberta] = useState(false);
+  const transferenciaRef = useRef<HTMLDivElement | null>(null);
 
   // Qual conversa a tela quer mostrar AGORA. Toda resposta de mensagens que chegar de uma
   // conversa diferente desta é descartada — sem isso, clicar rápido em duas conversas fazia
@@ -203,9 +243,22 @@ export function AtendimentoWorkspaceReal({
   // terminando de carregar não a arrasta de volta pro fim.
   const areaMensagensRef = useRef<HTMLDivElement | null>(null);
   const grudadoNoFimRef = useRef(true);
+  // "Carregar anteriores" coloca mensagens EM CIMA: guarda a posição pra tela não pular.
+  const ajusteRolagemRef = useRef<{ altura: number; topo: number } | null>(null);
+  // Maior updated_at já visto na conversa aberta — a atualização automática só pede o que mudou depois.
+  const sincronizadoAteRef = useRef<string | null>(null);
+  const linksAssinadosEmRef = useRef(0);
+  // Conversa que o DONO abriu clicando: enquanto estiver aberta, mensagem nova que chegar já conta como vista.
+  const abertaPeloDonoRef = useRef<string | null>(null);
   function rolarParaOFim() {
     const area = areaMensagensRef.current;
     if (area && grudadoNoFimRef.current) area.scrollTop = area.scrollHeight;
+  }
+
+  function registrarSincronizacao(lista: { updated_at: string }[]) {
+    for (const m of lista) {
+      if (!sincronizadoAteRef.current || m.updated_at > sincronizadoAteRef.current) sincronizadoAteRef.current = m.updated_at;
+    }
   }
 
   const SELECT_CONVERSAS =
@@ -239,9 +292,9 @@ export function AtendimentoWorkspaceReal({
     return escopado;
   }
 
-  const carregarConversas = useCallback(async () => {
+  const carregarConversas = useCallback(async ({ silencioso = false }: { silencioso?: boolean } = {}) => {
     const pedido = ++pedidoListaRef.current;
-    setCarregandoLista(true);
+    if (!silencioso) setCarregandoLista(true);
     setErroLista(null);
 
     // Busca vai no BANCO, não só nas 50 conversas já carregadas — antes, procurar um telefone
@@ -277,40 +330,64 @@ export function AtendimentoWorkspaceReal({
       query = query.eq("company_id", companyId).in("contact_id", [...contatoIds]);
     } else {
       query = comEscopoDaAba(query, aba);
+      // Sub-filtros no BANCO (antes filtravam só as 50 já carregadas — "Não lidas 17" eram 17 de 50).
+      if (aba !== "ia" && subFiltro === "nao_lidas") query = query.gt("unread_count", 0);
+      if (aba !== "ia" && subFiltro === "aguardando_resposta") query = query.eq("unread_count", 0).neq("status", "encerrada");
     }
 
+    // "Aguardando resposta" ainda depende de quem falou por último (conferido na tela), então pede uma janela maior.
+    const limite = termo.length < 2 && aba !== "ia" && subFiltro === "aguardando_resposta" ? Math.max(limiteLista, 200) : limiteLista;
     const { data, error } = await query
       .eq("ultima_mensagem.is_internal_note", false)
       .order("created_at", { referencedTable: "ultima_mensagem", ascending: false })
       .limit(1, { referencedTable: "ultima_mensagem" })
       .order("last_activity_at", { ascending: false })
-      .limit(50);
+      .limit(limite);
 
     // Mesma proteção das mensagens: se o usuário já trocou de aba, esta resposta é velha.
     if (pedido !== pedidoListaRef.current) return;
 
     if (error) {
-      setErroLista(`Não foi possível carregar as conversas: ${error.message}`);
-      setConversas(null);
+      // Atualização automática que falha (rede caiu um instante) não apaga a lista que já está na tela.
+      if (!silencioso) {
+        setErroLista(`Não foi possível carregar as conversas: ${error.message}`);
+        setConversas(null);
+      }
     } else {
       setConversas((data ?? []) as unknown as ConversaLista[]);
+      setTemMaisConversas((data?.length ?? 0) === limite);
+      setAtualizadoEm(new Date());
     }
     setCarregandoLista(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [supabase, aba, userProfileId, companyId, buscaAplicada]);
+  }, [supabase, aba, subFiltro, limiteLista, userProfileId, companyId, buscaAplicada]);
 
   /** Contagem total de cada aba (independente da aba selecionada), pro numerinho ao lado do rótulo. */
   const carregarContagensAbas = useCallback(async () => {
-    const abasParaContar: Aba[] = podeVerIA ? ["meus", "outros", "ia"] : ["meus", "outros"];
-    const resultados = await Promise.all(
-      abasParaContar.map((valorAba) =>
-        comEscopoDaAba(supabase.from("conversations").select("id", { count: "exact", head: true }), valorAba),
+    const abasParaContar: Aba[] = podeVerIA ? ["meus", "outros", "ia"] : ["meus"];
+    const [totais, naoLidas] = await Promise.all([
+      Promise.all(
+        abasParaContar.map((valorAba) =>
+          comEscopoDaAba(supabase.from("conversations").select("id", { count: "exact", head: true }), valorAba),
+        ),
       ),
-    );
+      Promise.all(
+        abasParaContar.map((valorAba) =>
+          comEscopoDaAba(supabase.from("conversations").select("id", { count: "exact", head: true }), valorAba).gt("unread_count", 0),
+        ),
+      ),
+    ]);
     setContagensAbas((atual) => {
       const novo = { ...atual };
       abasParaContar.forEach((valorAba, indice) => {
-        novo[valorAba] = resultados[indice].count ?? 0;
+        if (totais[indice].count !== null) novo[valorAba] = totais[indice].count;
+      });
+      return novo;
+    });
+    setNaoLidasPorAba((atual) => {
+      const novo = { ...atual };
+      abasParaContar.forEach((valorAba, indice) => {
+        if (naoLidas[indice].count !== null) novo[valorAba] = naoLidas[indice].count;
       });
       return novo;
     });
@@ -326,6 +403,8 @@ export function AtendimentoWorkspaceReal({
       // (depois de enviar/assumir) não esvazia, pra não piscar a tela.
       if (limpar) {
         grudadoNoFimRef.current = true;
+        sincronizadoAteRef.current = null;
+        setTemMensagensAnteriores(false);
         setMensagens(null);
         setAnexosPorMensagem({});
         setRevisoesPorMensagem({});
@@ -337,10 +416,10 @@ export function AtendimentoWorkspaceReal({
       // justamente as da prévia na lista.
       const { data, error } = await supabase
         .from("messages")
-        .select("*, author:user_profiles!messages_author_user_profile_id_fkey(id, full_name)")
+        .select(SELECT_MENSAGEM)
         .eq("conversation_id", conversationId)
         .order("created_at", { ascending: false })
-        .limit(200);
+        .limit(POR_PAGINA_MENSAGENS);
 
       if (conversaPedidaRef.current !== conversationId) return;
 
@@ -350,36 +429,116 @@ export function AtendimentoWorkspaceReal({
       } else {
         const lista = ((data ?? []) as unknown as MensagemComAutor[]).reverse();
         setMensagens(lista);
-        // Edições/exclusões (0009). Erro aqui (ex: migração ainda não aplicada) não derruba a conversa.
-        if (lista.length > 0) {
-          void supabase
-            .from("message_revisions")
-            .select(
-              "id, message_id, kind, origin, body_before, body_after, whatsapp_status, whatsapp_error, created_at, confirmed_at, " +
-                "requested_by:user_profiles!message_revisions_requested_by_user_profile_id_fkey(full_name)",
-            )
-            .in("message_id", lista.map((m) => m.id))
-            .order("created_at", { ascending: true })
-            .then(({ data: revisoes }) => {
-              if (conversaPedidaRef.current !== conversationId) return;
-              const agrupadas: Record<string, MessageRevision[]> = {};
-              for (const rev of (revisoes ?? []) as unknown as MessageRevision[]) (agrupadas[rev.message_id] ??= []).push(rev);
-              setRevisoesPorMensagem(agrupadas);
-            });
-        }
-        // Arquivos (áudio/imagem/documento/vídeo): links assinados pedidos ao servidor só pras
-        // mensagens de mídia desta conversa. Mesma proteção de corrida das mensagens.
-        const idsMidia = lista.filter((m) => TIPOS_COM_ARQUIVO.has(m.message_type)).map((m) => m.id);
-        if (idsMidia.length > 0) {
-          const links = await obterLinksAnexosAction(idsMidia).catch(() => ({}));
-          if (conversaPedidaRef.current === conversationId) setAnexosPorMensagem(links);
-        } else {
-          setAnexosPorMensagem({});
-        }
+        setTemMensagensAnteriores(lista.length === POR_PAGINA_MENSAGENS);
+        registrarSincronizacao(lista);
+        // Revisões e arquivos em paralelo (antes os arquivos esperavam a resposta anterior).
+        linksAssinadosEmRef.current = Date.now();
+        await carregarExtras(conversationId, lista, { substituir: true });
       }
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [supabase],
   );
+
+  /**
+   * Revisões (editada/apagada) e links dos arquivos de um conjunto de mensagens. "substituir" na
+   * carga completa; senão MESCLA — reassinar link de mídia que já está na tela faz áudio/imagem recarregar.
+   */
+  async function carregarExtras(
+    conversationId: string,
+    lista: Message[],
+    { substituir = false, pularMidiaComLink = false }: { substituir?: boolean; pularMidiaComLink?: boolean } = {},
+  ) {
+    if (lista.length === 0) {
+      if (substituir) {
+        setRevisoesPorMensagem({});
+        setAnexosPorMensagem({});
+      }
+      return;
+    }
+    const ids = lista.map((m) => m.id);
+    const idsMidia = lista
+      .filter((m) => TIPOS_COM_ARQUIVO.has(m.message_type) && !(pularMidiaComLink && anexosPorMensagem[m.id]))
+      .map((m) => m.id);
+    const [revisoesResp, links] = await Promise.all([
+      // Erro aqui (ex: migração 0009 ausente) não derruba a conversa.
+      supabase
+        .from("message_revisions")
+        .select(
+          "id, message_id, kind, origin, body_before, body_after, whatsapp_status, whatsapp_error, created_at, confirmed_at, " +
+            "requested_by:user_profiles!message_revisions_requested_by_user_profile_id_fkey(full_name)",
+        )
+        .in("message_id", ids)
+        .order("created_at", { ascending: true }),
+      idsMidia.length > 0 ? obterLinksAnexosAction(idsMidia).catch(() => ({}) as Record<string, AnexoParaExibir[]>) : Promise.resolve({}),
+    ]);
+    if (conversaPedidaRef.current !== conversationId) return;
+
+    const agrupadas: Record<string, MessageRevision[]> = {};
+    for (const id of ids) agrupadas[id] = [];
+    for (const rev of (revisoesResp.data ?? []) as unknown as MessageRevision[]) agrupadas[rev.message_id]?.push(rev);
+    setRevisoesPorMensagem((atual) => (substituir ? agrupadas : { ...atual, ...agrupadas }));
+    setAnexosPorMensagem((atual) => (substituir ? links : { ...atual, ...links }));
+  }
+
+  /** Só o que mudou desde a última leitura (mensagem nova, status de envio, edição, exclusão). */
+  async function carregarNovidadesDaConversa(conversationId: string) {
+    const desde = sincronizadoAteRef.current;
+    if (!desde || Date.now() - linksAssinadosEmRef.current > RENOVAR_LINKS_APOS_MS) {
+      await carregarMensagens(conversationId, { limpar: false });
+      return;
+    }
+    const { data } = await supabase
+      .from("messages")
+      .select(SELECT_MENSAGEM)
+      .eq("conversation_id", conversationId)
+      .gt("updated_at", desde)
+      .order("created_at", { ascending: true })
+      .limit(500);
+    if (conversaPedidaRef.current !== conversationId || !data || data.length === 0) return;
+
+    const mudadas = data as unknown as MensagemComAutor[];
+    registrarSincronizacao(mudadas);
+    setMensagens((atual) => {
+      const porId = new Map((atual ?? []).map((m) => [m.id, m]));
+      for (const m of mudadas) porId.set(m.id, m);
+      return [...porId.values()].sort((a, b) => a.created_at.localeCompare(b.created_at));
+    });
+    // Arquivo só das mensagens que ainda não têm link — as que já têm continuam tocando sem recarregar.
+    await carregarExtras(conversationId, mudadas, { pularMidiaComLink: true });
+  }
+
+  async function carregarMensagensAnteriores() {
+    const conversationId = selecionadaId;
+    const primeira = mensagens?.[0];
+    if (!conversationId || !primeira || carregandoAnteriores) return;
+    setCarregandoAnteriores(true);
+    const { data, error } = await supabase
+      .from("messages")
+      .select(SELECT_MENSAGEM)
+      .eq("conversation_id", conversationId)
+      .lt("created_at", primeira.created_at)
+      .order("created_at", { ascending: false })
+      .limit(POR_PAGINA_MENSAGENS);
+    setCarregandoAnteriores(false);
+    if (conversaPedidaRef.current !== conversationId) return;
+    if (error) {
+      mostrarAviso(`Não foi possível carregar as mensagens anteriores: ${error.message}`);
+      return;
+    }
+    const antigas = ((data ?? []) as unknown as MensagemComAutor[]).reverse();
+    const area = areaMensagensRef.current;
+    if (area) ajusteRolagemRef.current = { altura: area.scrollHeight, topo: area.scrollTop };
+    grudadoNoFimRef.current = false;
+    setMensagens((atual) => [...antigas, ...(atual ?? [])]);
+    setTemMensagensAnteriores(antigas.length === POR_PAGINA_MENSAGENS);
+    registrarSincronizacao(antigas);
+    await carregarExtras(conversationId, antigas);
+  }
+
+  useEffect(() => {
+    setLimiteLista(POR_PAGINA_LISTA);
+  }, [aba, subFiltro, buscaAplicada]);
 
   useEffect(() => {
     carregarConversas();
@@ -397,6 +556,13 @@ export function AtendimentoWorkspaceReal({
   }, [aba]);
 
   useLayoutEffect(() => {
+    const ajuste = ajusteRolagemRef.current;
+    const area = areaMensagensRef.current;
+    if (ajuste && area) {
+      area.scrollTop = ajuste.topo + (area.scrollHeight - ajuste.altura);
+      ajusteRolagemRef.current = null;
+      return;
+    }
     rolarParaOFim();
   }, [mensagens, anexosPorMensagem]);
 
@@ -409,6 +575,52 @@ export function AtendimentoWorkspaceReal({
       setSelecionadaId(conversas[0].id);
     }
   }, [conversas, selecionadaId]);
+
+  // Atualização automática. A função mais nova fica num ref, então o intervalo não precisa ser
+  // recriado a cada mudança de tela.
+  const atualizarAgoraRef = useRef<() => Promise<void>>(async () => {});
+  atualizarAgoraRef.current = async () => {
+    if (editandoId) return; // não mexe na conversa enquanto alguém edita uma mensagem
+    await Promise.all([
+      carregarConversas({ silencioso: true }),
+      carregarContagensAbas(),
+      selecionadaId ? carregarNovidadesDaConversa(selecionadaId) : Promise.resolve(),
+    ]);
+  };
+  useEffect(() => {
+    const tick = () => {
+      if (document.visibilityState === "visible") void atualizarAgoraRef.current();
+    };
+    const intervalo = window.setInterval(tick, INTERVALO_ATUALIZACAO_MS);
+    // Voltou pra aba do navegador: atualiza na hora, sem esperar o próximo ciclo.
+    document.addEventListener("visibilitychange", tick);
+    return () => {
+      window.clearInterval(intervalo);
+      document.removeEventListener("visibilitychange", tick);
+    };
+  }, []);
+
+  // Não lidas do próprio consultor no título da aba do navegador — dá pra ver de outra aba.
+  useEffect(() => {
+    const n = naoLidasPorAba.meus ?? 0;
+    document.title = n > 0 ? `(${n}) Atendimento · GRS` : "Atendimento · GRS";
+  }, [naoLidasPorAba.meus]);
+
+  useEffect(() => {
+    if (!transferenciaAberta) return;
+    const fecharSeFora = (evento: MouseEvent) => {
+      if (transferenciaRef.current && !transferenciaRef.current.contains(evento.target as Node)) setTransferenciaAberta(false);
+    };
+    const fecharNoEsc = (evento: KeyboardEvent) => {
+      if (evento.key === "Escape") setTransferenciaAberta(false);
+    };
+    document.addEventListener("mousedown", fecharSeFora);
+    document.addEventListener("keydown", fecharNoEsc);
+    return () => {
+      document.removeEventListener("mousedown", fecharSeFora);
+      document.removeEventListener("keydown", fecharNoEsc);
+    };
+  }, [transferenciaAberta]);
 
   useEffect(() => {
     supabase
@@ -426,22 +638,41 @@ export function AtendimentoWorkspaceReal({
    */
   function abrirConversa(conversa: ConversaLista) {
     setSelecionadaId(conversa.id);
+    abertaPeloDonoRef.current = conversa.assigned_user_profile_id === userProfileId ? conversa.id : null;
     if (conversa.assigned_user_profile_id !== userProfileId || conversa.unread_count === 0) return;
     setConversas((atual) => atual?.map((c) => (c.id === conversa.id ? { ...c, unread_count: 0 } : c)) ?? atual);
     void marcarConversaComoLidaAction(conversa.id);
   }
 
-  const conversaSelecionada = conversas?.find((c) => c.id === selecionadaId) ?? null;
+  // A conversa aberta pode sair da lista (ex: filtro "Não lidas" depois de lida, ou busca apagada):
+  // o painel continua mostrando ela em vez de ficar em branco.
+  const [conversaFixada, setConversaFixada] = useState<ConversaLista | null>(null);
+  const conversaDaLista = conversas?.find((c) => c.id === selecionadaId) ?? null;
+  useEffect(() => {
+    if (conversaDaLista) setConversaFixada(conversaDaLista);
+  }, [conversaDaLista]);
+  const conversaSelecionada = conversaDaLista ?? (conversaFixada?.id === selecionadaId ? conversaFixada : null);
+  // Conversa do Totalk (canal sem WhatsApp ligado ao CRM): o envio é bloqueado no servidor; a tela já
+  // deixa só "Nota interna", pra ninguém digitar uma resposta e só depois descobrir que não sai.
+  const semWhatsApp = conversaSelecionada?.channel?.provider === "totalk";
+  const emModoNota = modoNota || semWhatsApp;
+
+  // Dono com a conversa aberta: mensagem nova que a atualização automática trouxe já conta como vista.
+  useEffect(() => {
+    const c = conversaDaLista;
+    if (!c || abertaPeloDonoRef.current !== c.id || c.assigned_user_profile_id !== userProfileId || c.unread_count === 0) return;
+    if (document.visibilityState !== "visible") return;
+    setConversas((atual) => atual?.map((x) => (x.id === c.id ? { ...x, unread_count: 0 } : x)) ?? atual);
+    void marcarConversaComoLidaAction(c.id);
+  }, [conversaDaLista, userProfileId]);
 
   /** Contagem de cada sub-filtro dentro da aba atual — computada da lista já carregada, sem round-trip novo. */
-  const contagensSubFiltro = useMemo(() => {
-    const lista = conversas ?? [];
-    return {
-      todas: lista.length,
-      nao_lidas: lista.filter((c) => c.unread_count > 0).length,
-      aguardando_resposta: lista.filter(aguardandoResposta).length,
-    };
-  }, [conversas]);
+  const contagensSubFiltro: Record<SubFiltro, number | null> = {
+    todas: contagensAbas[aba],
+    nao_lidas: naoLidasPorAba[aba],
+    // Só dá pra contar olhando quem falou por último — mostra quando o filtro está aberto.
+    aguardando_resposta: subFiltro === "aguardando_resposta" && conversas ? conversas.filter(aguardandoResposta).length : null,
+  };
 
   const conversasFiltradas = useMemo(() => {
     if (!conversas) return [];
@@ -468,7 +699,7 @@ export function AtendimentoWorkspaceReal({
     mostrarAviso(resultado.message);
     if (resultado.ok) {
       setEditandoId(null);
-      await carregarMensagens(selecionadaId, { limpar: false });
+      await Promise.all([carregarNovidadesDaConversa(selecionadaId), carregarExtras(selecionadaId, mensagens?.filter((m) => m.id === messageId) ?? [])]);
     }
   }
 
@@ -480,7 +711,9 @@ export function AtendimentoWorkspaceReal({
     if (!window.confirm(pergunta)) return;
     const resultado = await apagarMensagemAction(mensagem.id);
     mostrarAviso(resultado.message);
-    if (resultado.ok) await carregarMensagens(selecionadaId, { limpar: false });
+    if (resultado.ok) {
+      await Promise.all([carregarNovidadesDaConversa(selecionadaId), carregarExtras(selecionadaId, [mensagem])]);
+    }
   }
 
   function mostrarAviso(texto: string) {
@@ -495,7 +728,7 @@ export function AtendimentoWorkspaceReal({
     if (!texto.trim()) return;
 
     setEnviando(true);
-    const resultado = modoNota
+    const resultado = emModoNota
       ? await criarNotaInternaAction(selecionadaId, texto)
       : await enviarMensagemAction(selecionadaId, texto, crypto.randomUUID());
     setEnviando(false);
@@ -503,27 +736,30 @@ export function AtendimentoWorkspaceReal({
 
     if (resultado.ok) {
       setRascunhos((atual) => ({ ...atual, [selecionadaId]: "" }));
-      await carregarMensagens(selecionadaId, { limpar: false });
-      await carregarConversas();
-      await carregarContagensAbas();
+      grudadoNoFimRef.current = true;
+      // Tudo ao mesmo tempo (antes: uma consulta esperando a outra, ~3x mais lento).
+      await Promise.all([carregarNovidadesDaConversa(selecionadaId), carregarConversas({ silencioso: true }), carregarContagensAbas()]);
     }
+  }
+
+  async function atualizarListaEContagens() {
+    await Promise.all([carregarConversas({ silencioso: true }), carregarContagensAbas()]);
   }
 
   async function handleAssumir() {
     if (!selecionadaId) return;
     const resultado = await assumirConversaAction(selecionadaId);
     mostrarAviso(resultado.message);
-    await carregarConversas();
-    await carregarContagensAbas();
+    await atualizarListaEContagens();
   }
 
-  async function handleTransferir(paraUserProfileId: string) {
+  async function handleTransferir(usuario: UsuarioEmpresa) {
     if (!selecionadaId) return;
-    const resultado = await transferirConversaAction(selecionadaId, paraUserProfileId, null);
-    mostrarAviso(resultado.message);
     setTransferenciaAberta(false);
-    await carregarConversas();
-    await carregarContagensAbas();
+    if (!window.confirm(`Transferir esta conversa para ${usuario.full_name ?? "este usuário"}?`)) return;
+    const resultado = await transferirConversaAction(selecionadaId, usuario.id, null);
+    mostrarAviso(resultado.message);
+    await atualizarListaEContagens();
   }
 
   async function handleConcluirOuReabrir() {
@@ -533,23 +769,32 @@ export function AtendimentoWorkspaceReal({
         ? await reabrirConversaAction(selecionadaId)
         : await concluirConversaAction(selecionadaId);
     mostrarAviso(resultado.message);
-    await carregarConversas();
-    await carregarContagensAbas();
+    await atualizarListaEContagens();
   }
 
   async function handleReenviar(messageId: string) {
     if (!selecionadaId) return;
     const resultado = await reenviarMensagemFalhadaAction(messageId, selecionadaId);
     mostrarAviso(resultado.message);
-    await carregarMensagens(selecionadaId, { limpar: false });
+    await carregarNovidadesDaConversa(selecionadaId);
   }
 
   return (
     <div className="flex h-full min-h-0 w-full">
       <div className="flex h-full w-[300px] shrink-0 flex-col border-r border-[var(--ns-border)]">
         <div className="border-b border-[var(--ns-border)] px-3 pt-3">
-          <h1 className="text-lg font-semibold text-[var(--ns-text)]">Atendimento</h1>
-          <p className="mb-3 text-xs text-[var(--ns-text-secondary)]">Conversas reais — sem dado fictício.</p>
+          <div className="mb-3 flex items-center justify-between gap-2">
+            <h1 className="text-lg font-semibold text-[var(--ns-text)]">Atendimento</h1>
+            <button
+              type="button"
+              onClick={() => void atualizarAgoraRef.current()}
+              title={atualizadoEm ? `Atualiza sozinho a cada 15 s · última vez às ${horaCurta(atualizadoEm.toISOString())}` : "Atualizar"}
+              className="inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-[11px] text-[var(--ns-text-secondary)] transition hover:bg-[var(--ns-surface-hover)] hover:text-[var(--ns-text)]"
+            >
+              <RefreshCw aria-hidden="true" className="h-3 w-3" />
+              {atualizadoEm ? horaCurta(atualizadoEm.toISOString()) : "Atualizar"}
+            </button>
+          </div>
         </div>
         <div className="flex flex-col gap-3 border-b border-[var(--ns-border)] p-3">
           <input
@@ -569,8 +814,9 @@ export function AtendimentoWorkspaceReal({
               porque quem supervisiona pode ver conversa de qualquer equipe aqui, não só a própria. "IA" só
               existe pra quem supervisiona — quem atende comum não vê conversa de ninguém além da própria
               (RLS já garante isso; aqui é só não oferecer a aba). */}
+          {abasVisiveis.length > 1 && (
           <div className="flex gap-1 rounded-lg bg-[var(--ns-surface-hover)] p-1 text-sm">
-            {(podeVerIA ? (["meus", "outros", "ia"] as const) : (["meus", "outros"] as const)).map((valor) => (
+            {abasVisiveis.map((valor) => (
               <button
                 key={valor}
                 type="button"
@@ -587,6 +833,7 @@ export function AtendimentoWorkspaceReal({
               </button>
             ))}
           </div>
+          )}
 
           {/* Pergunta 2: o que falta fazer? Não existe pra "IA" — lá ninguém da equipe "lê" ou "responde". */}
           {aba !== "ia" && (
@@ -602,9 +849,9 @@ export function AtendimentoWorkspaceReal({
                   }`}
                 >
                   {filtro.rotulo}
-                  <span className="ml-1 text-[10px] font-normal text-[var(--ns-text-secondary)]">
-                    {contagensSubFiltro[filtro.id]}
-                  </span>
+                  {contagensSubFiltro[filtro.id] !== null && (
+                    <span className="ml-1 text-[10px] font-normal text-[var(--ns-text-secondary)]">{contagensSubFiltro[filtro.id]}</span>
+                  )}
                 </button>
               ))}
             </div>
@@ -640,7 +887,7 @@ export function AtendimentoWorkspaceReal({
                     {horaOuData(conversa.last_activity_at)}
                   </span>
                 </div>
-                <span className="truncate text-xs text-[var(--ns-text-secondary)]">{conversa.last_message_preview ?? "—"}</span>
+                <span className="truncate text-xs text-[var(--ns-text-secondary)]">{previaLegivel(conversa.last_message_preview)}</span>
                 <div className="flex items-center gap-2">
                   <EstadoBadge estado={STATUS_PARA_BADGE[conversa.status]} />
                   <span className="truncate text-[11px] text-[var(--ns-text-secondary)]">{telefone ?? conversa.channel?.name ?? "Canal"}</span>
@@ -653,6 +900,15 @@ export function AtendimentoWorkspaceReal({
               </button>
             );
           })}
+          {temMaisConversas && !carregandoLista && (
+            <button
+              type="button"
+              onClick={() => setLimiteLista((atual) => atual + POR_PAGINA_LISTA)}
+              className="w-full px-3 py-3 text-center text-xs font-medium text-[var(--ns-primary)] hover:bg-[var(--ns-surface-hover)]"
+            >
+              Carregar mais conversas
+            </button>
+          )}
         </div>
       </div>
 
@@ -692,7 +948,7 @@ export function AtendimentoWorkspaceReal({
                     Assumir
                   </button>
                 )}
-                <div className="relative">
+                <div className="relative" ref={transferenciaRef}>
                   <button
                     type="button"
                     onClick={() => setTransferenciaAberta((v) => !v)}
@@ -709,7 +965,7 @@ export function AtendimentoWorkspaceReal({
                           <button
                             key={u.id}
                             type="button"
-                            onClick={() => handleTransferir(u.id)}
+                            onClick={() => handleTransferir(u)}
                             className="block w-full rounded-md px-2.5 py-1.5 text-left text-xs text-[var(--ns-text)] hover:bg-[var(--ns-surface-hover)]"
                           >
                             {u.full_name ?? u.id}
@@ -744,10 +1000,34 @@ export function AtendimentoWorkspaceReal({
                   {erroMensagens}
                 </p>
               )}
+              {mensagens === null && !erroMensagens && (
+                <p className="text-center text-sm text-[var(--ns-text-secondary)]">Carregando mensagens...</p>
+              )}
               {mensagens?.length === 0 && (
                 <p className="text-center text-sm text-[var(--ns-text-secondary)]">Nenhuma mensagem ainda.</p>
               )}
-              {mensagens?.map((mensagem) => {
+              {temMensagensAnteriores && (
+                <div className="flex justify-center">
+                  <button
+                    type="button"
+                    onClick={carregarMensagensAnteriores}
+                    disabled={carregandoAnteriores}
+                    className="rounded-full border border-[var(--ns-border)] px-3 py-1 text-xs text-[var(--ns-text-secondary)] transition hover:bg-[var(--ns-surface-hover)] disabled:opacity-50"
+                  >
+                    {carregandoAnteriores ? "Carregando..." : "Carregar mensagens anteriores"}
+                  </button>
+                </div>
+              )}
+              {mensagens?.map((mensagem, indice) => {
+                const anterior = indice > 0 ? mensagens[indice - 1] : null;
+                const separadorDia =
+                  !anterior || new Date(anterior.created_at).toDateString() !== new Date(mensagem.created_at).toDateString() ? (
+                    <div className="sticky top-0 z-[1] flex justify-center py-1">
+                      <span className="rounded-full bg-[var(--ns-surface-hover)] px-2.5 py-0.5 text-[11px] font-medium text-[var(--ns-text-secondary)] shadow-sm">
+                        {rotuloDia(mensagem.created_at)}
+                      </span>
+                    </div>
+                  ) : null;
                 const revisoes = revisoesPorMensagem[mensagem.id] ?? [];
                 const apagada = Boolean(mensagem.deleted_at);
                 const { podeEditar, podeApagar } = permissoesDaMensagem(mensagem, {
@@ -759,8 +1039,9 @@ export function AtendimentoWorkspaceReal({
 
                 if (mensagem.is_internal_note) {
                   return (
+                    <Fragment key={mensagem.id}>
+                    {separadorDia}
                     <div
-                      key={mensagem.id}
                       className={`mx-auto flex max-w-md items-start gap-2 rounded-lg border px-3 py-2 text-xs text-[var(--ns-text)] ${
                         apagada ? "border-[var(--ns-danger)]/40 bg-[var(--ns-danger)]/10" : "border-[var(--ns-warning)]/40 bg-[var(--ns-warning)]/10"
                       }`}
@@ -786,17 +1067,23 @@ export function AtendimentoWorkspaceReal({
                             onCancelar={() => setEditandoId(null)}
                           />
                         ) : (
-                          <p className={`text-[var(--ns-text-secondary)] ${apagada ? "italic opacity-80" : ""}`}>{corpoSemAssinaturaAntiga(mensagem)}</p>
+                          <p className={`whitespace-pre-wrap text-[var(--ns-text-secondary)] ${apagada ? "italic opacity-80" : ""}`}>{corpoSemAssinaturaAntiga(mensagem)}</p>
                         )}
                         <HistoricoRevisoes revisoes={revisoes} claro={false} />
+                        <p className="mt-0.5 text-right text-[10px] text-[var(--ns-text-secondary)]">
+                          {remetenteDe(mensagem)} · {horaCurta(mensagem.created_at)}
+                        </p>
                       </div>
                     </div>
+                    </Fragment>
                   );
                 }
 
                 const doCliente = mensagem.direction === "entrada";
                 return (
-                  <div key={mensagem.id} className={`flex flex-col ${doCliente ? "items-start" : "items-end"}`}>
+                  <Fragment key={mensagem.id}>
+                  {separadorDia}
+                  <div className={`flex flex-col ${doCliente ? "items-start" : "items-end"}`}>
                     {/* Quem enviou — nunca fica implícito: nome de quem atendeu, ou "IA" quando foi o
                         assistente. Cliente não precisa de rótulo: só existe uma pessoa do lado esquerdo. */}
                     {!doCliente && (
@@ -866,10 +1153,11 @@ export function AtendimentoWorkspaceReal({
                           onEditar={() => setEditandoId(mensagem.id)}
                           onApagar={() => handleApagarMensagem(mensagem)}
                         />
-                        <span>{horaOuData(mensagem.created_at, true)}</span>
+                        <span>{horaCurta(mensagem.created_at)}</span>
                       </div>
                     </div>
                   </div>
+                  </Fragment>
                 );
               })}
             </div>
@@ -881,43 +1169,51 @@ export function AtendimentoWorkspaceReal({
             )}
 
             <form onSubmit={handleEnviar} className="border-t border-[var(--ns-border)] p-3">
+              {semWhatsApp && (
+                <p className="mb-2 rounded-lg bg-[var(--ns-surface-hover)] px-2.5 py-1.5 text-[11px] text-[var(--ns-text-secondary)]">
+                  O WhatsApp deste número ainda não está ligado ao CRM — aqui dá pra escrever só nota interna. Responda o cliente pelo Totalk.
+                </p>
+              )}
               <div className="mb-2 flex items-center gap-2">
                 <button
                   type="button"
                   onClick={() => setModoNota(false)}
-                  className={`rounded-lg px-2.5 py-1 text-xs font-medium ${!modoNota ? "bg-[var(--ns-primary)]/15 text-[var(--ns-primary)]" : "text-[var(--ns-text-secondary)]"}`}
+                  disabled={semWhatsApp}
+                  title={semWhatsApp ? "WhatsApp ainda não conectado ao CRM" : undefined}
+                  className={`rounded-lg px-2.5 py-1 text-xs font-medium disabled:cursor-not-allowed disabled:opacity-40 ${!emModoNota ? "bg-[var(--ns-primary)]/15 text-[var(--ns-primary)]" : "text-[var(--ns-text-secondary)]"}`}
                 >
                   Mensagem
                 </button>
                 <button
                   type="button"
                   onClick={() => setModoNota(true)}
-                  className={`rounded-lg px-2.5 py-1 text-xs font-medium ${modoNota ? "bg-[var(--ns-warning)]/15 text-[var(--ns-warning)]" : "text-[var(--ns-text-secondary)]"}`}
+                  className={`rounded-lg px-2.5 py-1 text-xs font-medium ${emModoNota ? "bg-[var(--ns-warning)]/15 text-[var(--ns-warning)]" : "text-[var(--ns-text-secondary)]"}`}
                 >
                   Nota interna
                 </button>
+                <span className="ml-auto text-[10px] text-[var(--ns-text-secondary)]">Enter envia · Shift+Enter pula linha</span>
               </div>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  title="Registrar ligação (ainda não implementado nesta entrega)"
-                  disabled
-                  className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-[var(--ns-border)] text-[var(--ns-text-secondary)] opacity-50"
-                >
-                  <Phone aria-hidden="true" className="h-4 w-4" />
-                </button>
-                <input
-                  type="text"
+              <div className="flex items-end gap-2">
+                <textarea
                   value={rascunhos[selecionadaId ?? ""] ?? ""}
                   onChange={(event) =>
                     setRascunhos((atual) => ({ ...atual, [selecionadaId ?? ""]: event.target.value }))
                   }
-                  placeholder={modoNota ? "Escreva uma nota interna..." : "Digite uma mensagem..."}
-                  className="flex-1 rounded-lg border border-[var(--ns-border)] bg-[var(--ns-surface)] px-3 py-2 text-sm text-[var(--ns-text)] outline-none placeholder:text-[var(--ns-text-secondary)] focus-visible:ring-2 focus-visible:ring-[var(--ns-primary)]"
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
+                      event.preventDefault();
+                      event.currentTarget.form?.requestSubmit();
+                    }
+                  }}
+                  rows={Math.min(5, Math.max(1, (rascunhos[selecionadaId ?? ""] ?? "").split("\n").length))}
+                  placeholder={emModoNota ? "Escreva uma nota interna..." : "Digite uma mensagem..."}
+                  className={`flex-1 resize-none rounded-lg border bg-[var(--ns-surface)] px-3 py-2 text-sm text-[var(--ns-text)] outline-none placeholder:text-[var(--ns-text-secondary)] focus-visible:ring-2 ${
+                    emModoNota ? "border-[var(--ns-warning)]/50 focus-visible:ring-[var(--ns-warning)]" : "border-[var(--ns-border)] focus-visible:ring-[var(--ns-primary)]"
+                  }`}
                 />
                 <button
                   type="submit"
-                  disabled={enviando}
+                  disabled={enviando || !(rascunhos[selecionadaId ?? ""] ?? "").trim()}
                   className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[var(--ns-primary)] text-[var(--ns-primary-foreground)] transition hover:opacity-90 disabled:opacity-50"
                 >
                   <Send aria-hidden="true" className="h-4 w-4" />
@@ -983,35 +1279,15 @@ export function AtendimentoWorkspaceReal({
                 <LinhaFicha rotulo="Equipe" valor={conversaSelecionada.team?.name ?? "Sem equipe"} />
                 <LinhaFicha rotulo="Responsável" valor={nomeResponsavel(conversaSelecionada, "Sem responsável")} />
                 <LinhaFicha rotulo="Canal" valor={conversaSelecionada.channel?.name ?? "—"} />
-                <LinhaFicha rotulo="Iniciada em" valor={formatarDataHora(conversaSelecionada.created_at)} />
+                {/* Conversa do Totalk: created_at é o dia da IMPORTAÇÃO, não do atendimento — não mostrar como início. */}
+                {!conversaSelecionada.external_id && (
+                  <LinhaFicha rotulo="Iniciada em" valor={formatarDataHora(conversaSelecionada.created_at)} />
+                )}
                 <LinhaFicha rotulo="Última atividade" valor={formatarDataHora(conversaSelecionada.last_activity_at)} />
               </dl>
             </section>
 
-            <section className="border-b border-[var(--ns-border)] px-4 py-3.5">
-              <button
-                type="button"
-                onClick={() => carregarConversas()}
-                className="inline-flex items-center justify-center gap-2 rounded-lg border border-[var(--ns-border)] px-3 py-2 text-xs font-medium text-[var(--ns-text)] transition hover:bg-[var(--ns-surface-hover)]"
-              >
-                <RefreshCw aria-hidden="true" className="h-3.5 w-3.5" />
-                Atualizar
-              </button>
-            </section>
 
-            <div className="px-4 py-3.5 text-xs leading-relaxed text-[var(--ns-text-secondary)]">
-              Resumo automático da IA, etiquetas, pré-venda, pós-venda e ações de cadastro/análise ainda não estão
-              integrados nesta entrega (dependem da Entrega D — ações do CRM no atendimento, e da IA com credencial
-              por empresa). Tudo o que aparece acima é dado real do banco, sem dado fictício.
-            </div>
-
-            {isAdminOuManager && (
-              <p className="px-4 pb-4 text-xs text-[var(--ns-text-secondary)]">
-                Você vê todas as conversas da empresa (admin/gerente), inclusive em &quot;Outros&quot;. Consultores
-                veem só as próprias em &quot;Meus&quot; + o que está sem responsável ou com outra pessoa em
-                &quot;Outros&quot;.
-              </p>
-            )}
           </>
         )}
       </aside>
@@ -1029,7 +1305,7 @@ function ArquivoDaMensagem({ tipo, anexos, doCliente }: { tipo: string; anexos: 
     return (
       <p className={`flex items-center gap-1.5 text-xs italic ${doCliente ? "text-[var(--ns-text-secondary)]" : "opacity-80"}`}>
         <FileText aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />
-        {ROTULO_TIPO[tipo] ?? "Arquivo"} — arquivo ainda sendo copiado do Totalk
+        {ROTULO_TIPO[tipo] ?? "Arquivo"} — arquivo não disponível
       </p>
     );
   }

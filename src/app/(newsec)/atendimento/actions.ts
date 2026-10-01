@@ -1,6 +1,7 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+// Sem revalidatePath aqui de propósito: a tela de atendimento busca tudo do lado do cliente, então
+// revalidar a rota só fazia o servidor redesenhar a página a cada ação (mais lento, nada muda).
 import { getCurrentUserContext } from "@/lib/auth/current-user";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -94,7 +95,6 @@ export async function enviarMensagemAction(
   if (error) return { ok: false, message: `Não foi possível enviar: ${error.message}.` };
 
   const resultado = data?.[0];
-  revalidatePath("/atendimento");
   return { ok: true, message: resultado?.ja_existia ? "Mensagem já enviada." : "Mensagem enviada." };
 }
 
@@ -122,7 +122,6 @@ export async function editarMensagemAction(messageId: string, novoTexto: string)
   const { supabase } = await getCurrentUserContext();
   const { data, error } = await supabase.rpc("editar_mensagem", { p_message_id: messageId, p_novo_texto: novoTexto });
   if (error) return { ok: false, message: error.message };
-  revalidatePath("/atendimento");
   const status = (data as { whatsapp_status: string }[] | null)?.[0]?.whatsapp_status;
   return { ok: true, message: status === "aguardando" ? "Edição enviada — aguardando o WhatsApp confirmar." : "Mensagem editada." };
 }
@@ -131,7 +130,6 @@ export async function apagarMensagemAction(messageId: string): Promise<Atendimen
   const { supabase } = await getCurrentUserContext();
   const { data, error } = await supabase.rpc("apagar_mensagem", { p_message_id: messageId });
   if (error) return { ok: false, message: error.message };
-  revalidatePath("/atendimento");
   const status = (data as { whatsapp_status: string }[] | null)?.[0]?.whatsapp_status;
   return { ok: true, message: status === "aguardando" ? "Exclusão enviada — aguardando o WhatsApp confirmar." : "Mensagem apagada." };
 }
@@ -157,7 +155,6 @@ export async function criarNotaInternaAction(conversationId: string, texto: stri
 
   if (error) return { ok: false, message: `Não foi possível salvar a nota: ${error.message}.` };
 
-  revalidatePath("/atendimento");
   return { ok: true, message: "Nota salva." };
 }
 
@@ -191,7 +188,6 @@ export async function assumirConversaAction(conversationId: string): Promise<Ate
     note: "Assumida da fila",
   });
 
-  revalidatePath("/atendimento");
   return { ok: true, message: "Conversa assumida." };
 }
 
@@ -234,7 +230,6 @@ export async function transferirConversaAction(
     note: nota,
   });
 
-  revalidatePath("/atendimento");
   return { ok: true, message: "Conversa transferida." };
 }
 
@@ -250,7 +245,6 @@ export async function concluirConversaAction(conversationId: string): Promise<At
   if (error) return { ok: false, message: `Não foi possível concluir: ${error.message}.` };
   if (!data || data.length === 0) return { ok: false, message: "Você não tem acesso a esta conversa." };
 
-  revalidatePath("/atendimento");
   return { ok: true, message: "Conversa concluída." };
 }
 
@@ -278,7 +272,6 @@ export async function reenviarMensagemFalhadaAction(messageId: string, conversat
   const resultado = data?.[0];
   if (!resultado?.ok) return { ok: false, message: resultado?.mensagem ?? "Não foi possível reenfileirar." };
 
-  revalidatePath("/atendimento");
   return { ok: true, message: resultado.mensagem };
 }
 
@@ -294,6 +287,5 @@ export async function reabrirConversaAction(conversationId: string): Promise<Ate
   if (error) return { ok: false, message: `Não foi possível reabrir: ${error.message}.` };
   if (!data || data.length === 0) return { ok: false, message: "Você não tem acesso a esta conversa." };
 
-  revalidatePath("/atendimento");
   return { ok: true, message: "Conversa reaberta." };
 }

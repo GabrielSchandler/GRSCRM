@@ -1,6 +1,7 @@
 import { AuthenticatedShell } from "@/components/layout/authenticated-shell";
 import { AppSidebar } from "@/components/layout/app-sidebar";
 import { getCurrentUserContext } from "@/lib/auth/current-user";
+import { Notificador } from "@/components/newsec/notificador";
 import packageJson from "../../../package.json";
 
 export default async function AuthenticatedLayout({
@@ -8,7 +9,7 @@ export default async function AuthenticatedLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  await getCurrentUserContext();
+  const { userProfileId, companyId } = await getCurrentUserContext();
 
   return (
     <AuthenticatedShell
@@ -20,6 +21,8 @@ export default async function AuthenticatedLayout({
       }
     >
       {children}
+      {/* Aviso de mensagem nova (WhatsApp e chat interno) também nas telas do CRM antigo. */}
+      <Notificador userProfileId={userProfileId} companyId={companyId} oferecerAvisoWindows />
     </AuthenticatedShell>
   );
 }

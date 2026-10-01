@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useRef, useSyncExternalStore } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
-import { MessageCircle, MessagesSquare, X } from "lucide-react";
+import { BellRing, MessageCircle, MessagesSquare, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/browser";
 import {
   adicionarAviso,
@@ -17,7 +17,8 @@ import {
 
 // Roda mesmo com a aba do navegador em segundo plano — é justamente quando o aviso mais importa
 // (o navegador pode espaçar pra ~1 min nesse caso).
-const INTERVALO_MS = 15_000;
+const INTERVALO_MS = 10_000;
+const CHAVE_PEDIDO_DISPENSADO = "ns:pedido-aviso-windows-dispensado";
 const AVISO_SOME_EM_MS = 8_000;
 
 type ConversaComNaoLida = { id: string; unread_count: number; last_message_preview: string | null; contact: { display_name: string | null } | null };
@@ -25,7 +26,10 @@ type ConversaInterna = { thread_id: string; kind: string; title: string | null; 
 
 /** Som curto gerado na hora (sem arquivo): dois tons — mais agudo pro chat interno. */
 function tocarSom(contexto: AudioContext | null, tipo: AvisoNotificacao["tipo"]) {
-  if (!contexto || contexto.state !== "running") return;
+  if (!contexto) return;
+  if (contexto.state !== "running") void contexto.resume();
+  // Marca de quando tocou (conferência/teste; não aparece na tela).
+  document.documentElement.dataset.nsUltimoSom = String(Date.now());
   const notas = tipo === "interno" ? [880, 1175] : [660, 880];
   notas.forEach((frequencia, indice) => {
     const oscilador = contexto.createOscillator();
@@ -50,12 +54,47 @@ function previa(texto: string | null) {
 }
 
 /**
+ * Roda nas DUAS cascas do sistema: no shell novo (atendimento/chat interno) e no CRM antigo
+ * (comercial, jurídico...) — o aviso tem que chegar em qualquer tela (pedido do Gabriel, 01/10/2026).
+ * Por isso o visual vem embrulhado em ".ns-shell": no CRM antigo as cores --ns-* não existem.
+ *
  * Avisador do shell NewSec: a cada 15 s confere as conversas de WhatsApp do próprio usuário com
  * mensagem não lida e as conversas do chat interno. Quando o número de uma sobe: toca som, mostra o
  * aviso no canto da tela (clicável) e, se a pessoa permitiu, a notificação do sistema. Também põe o
  * total no título da aba do navegador.
  */
-export function Notificador({ userProfileId, companyId }: { userProfileId: string; companyId: string }) {
+export function Notificador({
+  userProfileId,
+  companyId,
+  oferecerAvisoWindows = false,
+}: {
+  userProfileId: string;
+  companyId: string;
+  /** No CRM antigo não há o sino da barra do topo — mostra um botão próprio pra ativar o aviso do Windows. */
+  oferecerAvisoWindows?: boolean;
+}) {
+  const [pedidoDispensado, setPedidoDispensado] = useState(true);
+  useEffect(() => {
+    try {
+      setPedidoDispensado(localStorage.getItem(CHAVE_PEDIDO_DISPENSADO) === "sim");
+    } catch {
+      setPedidoDispensado(false);
+    }
+  }, []);
+  function dispensarPedido() {
+    setPedidoDispensado(true);
+    try {
+      localStorage.setItem(CHAVE_PEDIDO_DISPENSADO, "sim");
+    } catch {
+      // sem armazenamento: some só nesta página
+    }
+  }
+  async function pedirPermissao() {
+    if (!("Notification" in window)) return;
+    const resposta = await Notification.requestPermission();
+    atualizarNotificacoes({ permissaoNavegador: resposta });
+    dispensarPedido();
+  }
   const router = useRouter();
   const estado = useSyncExternalStore(assinarNotificacoes, lerNotificacoes, lerNotificacoesNoServidor);
   const anteriorRef = useRef<{ whatsapp: Map<string, number>; interno: Map<string, number> } | null>(null);
@@ -186,9 +225,26 @@ export function Notificador({ userProfileId, companyId }: { userProfileId: strin
     document.title = total > 0 ? `(${total}) ${base}` : base;
   }, [total]);
 
-  if (estado.avisos.length === 0) return null;
+  const mostrarPedido = oferecerAvisoWindows && !pedidoDispensado && estado.permissaoNavegador === "default";
+  if (estado.avisos.length === 0 && !mostrarPedido) return null;
   return (
-    <div className="pointer-events-none fixed bottom-4 right-4 z-50 flex w-80 flex-col gap-2" aria-live="polite">
+    <div
+      className="ns-shell pointer-events-none fixed bottom-4 right-4 z-[60] flex w-80 flex-col gap-2"
+      style={{ background: "transparent" }}
+      aria-live="polite"
+    >
+      {mostrarPedido && (
+        <div className="pointer-events-auto flex items-center gap-2 rounded-xl border border-[var(--ns-border)] bg-[var(--ns-surface)] p-2.5 text-xs text-[var(--ns-text)] shadow-lg">
+          <BellRing aria-hidden="true" className="h-4 w-4 shrink-0 text-[var(--ns-primary)]" />
+          <span className="flex-1">Receber aviso de mensagem nova mesmo com outra aba ou programa aberto?</span>
+          <button type="button" onClick={pedirPermissao} className="rounded-md bg-[var(--ns-primary)] px-2 py-1 font-medium text-[var(--ns-primary-foreground)]">
+            Ativar
+          </button>
+          <button type="button" onClick={dispensarPedido} aria-label="Agora não" className="text-[var(--ns-text-secondary)] hover:text-[var(--ns-text)]">
+            <X aria-hidden="true" className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      )}
       {estado.avisos.slice(0, 3).map((aviso) => (
         <div
           key={aviso.id}

@@ -361,8 +361,9 @@ export function AtendimentoWorkspaceReal({
     setErroLista(null);
 
     // Busca vai no BANCO, não só nas 50 conversas já carregadas — antes, procurar um telefone
-    // de alguém fora da lista inicial não achava nada (relatado pelo Gabriel, 30/09/2026). Com
-    // busca ativa, procura em todas as abas (RLS continua limitando o que cada um pode ver).
+    // de alguém fora da lista inicial não achava nada (relatado pelo Gabriel, 30/09/2026). Desde
+    // 02/10/2026 a busca RESPEITA a aba e os filtros (pedido do Gabriel): em "Meus" procura só nas
+    // conversas da pessoa. A RLS do banco continua sendo a trava de verdade.
     const termo = buscaAplicada.trim();
     let query = supabase.from("conversations").select(SELECT_CONVERSAS);
     if (termo.length >= 2) {
@@ -390,16 +391,15 @@ export function AtendimentoWorkspaceReal({
         setCarregandoLista(false);
         return;
       }
-      query = query.eq("company_id", companyId).in("contact_id", [...contatoIds]);
-    } else {
-      query = comEscopoDaAba(query, aba);
-      // Sub-filtros no BANCO (antes filtravam só as 50 já carregadas — "Não lidas 17" eram 17 de 50).
-      if (aba !== "ia" && subFiltro === "nao_lidas") query = query.gt("unread_count", 0);
-      if (aba !== "ia" && subFiltro === "aguardando_resposta") query = query.eq("unread_count", 0).neq("status", "encerrada");
+      query = query.in("contact_id", [...contatoIds]);
     }
+    query = comEscopoDaAba(query, aba);
+    // Sub-filtros no BANCO (antes filtravam só as 50 já carregadas — "Não lidas 17" eram 17 de 50).
+    if (aba !== "ia" && subFiltro === "nao_lidas") query = query.gt("unread_count", 0);
+    if (aba !== "ia" && subFiltro === "aguardando_resposta") query = query.eq("unread_count", 0).neq("status", "encerrada");
 
     // "Aguardando resposta" ainda depende de quem falou por último (conferido na tela), então pede uma janela maior.
-    const limite = termo.length < 2 && aba !== "ia" && subFiltro === "aguardando_resposta" ? Math.max(limiteLista, 200) : limiteLista;
+    const limite = aba !== "ia" && subFiltro === "aguardando_resposta" ? Math.max(limiteLista, 200) : limiteLista;
     const { data, error } = await query
       .eq("ultima_mensagem.is_internal_note", false)
       .order("created_at", { referencedTable: "ultima_mensagem", ascending: false })
@@ -962,7 +962,7 @@ export function AtendimentoWorkspaceReal({
           />
           {buscaAplicada.trim().length >= 2 && (
             <p className="-mt-1 text-[11px] text-[var(--ns-text-secondary)]">
-              Buscando em todas as conversas (todas as abas), não só nas carregadas.
+              Buscando em todas as conversas desta aba e filtro, não só nas carregadas.
             </p>
           )}
           {/* Pergunta 1: de quem é a conversa? "Outros" é o atendimento humano de outro login (atribuído a

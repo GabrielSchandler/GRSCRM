@@ -4,6 +4,7 @@
 // revalidar a rota só fazia o servidor redesenhar a página a cada ação (mais lento, nada muda).
 import { getCurrentUserContext } from "@/lib/auth/current-user";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { despacharMensagem, despacharPendentes } from "@/lib/atendimento/whatsapp";
 
 export type AtendimentoActionState = { ok: boolean; message: string };
 
@@ -58,7 +59,7 @@ export async function obterLinksAnexosAction(messageIds: string[]): Promise<Reco
  * própria função trata isso como sucesso idempotente.
  */
 const AVISO_SEM_WHATSAPP =
-  "Envio bloqueado: esta conversa veio do Totalk e o WhatsApp ainda não está conectado ao CRM. Responda pelo Totalk por enquanto (nota interna funciona).";
+  "Envio bloqueado: o WhatsApp deste número ainda não está conectado ao CRM. Responda pelo Totalk por enquanto (nota interna funciona).";
 
 /**
  * Canal importado do Totalk (provider="totalk") ainda não tem WhatsApp ligado no CRM. Sem esta
@@ -69,7 +70,8 @@ const AVISO_SEM_WHATSAPP =
 async function canalSemWhatsApp(supabase: Awaited<ReturnType<typeof getCurrentUserContext>>["supabase"], conversationId: string) {
   const { data } = await supabase.from("conversations").select("channel:channels(provider)").eq("id", conversationId).maybeSingle();
   const canal = (data as { channel: { provider: string } | null } | null)?.channel;
-  return !canal || canal.provider === "totalk";
+  // Fail-closed: só canal com WhatsApp conectado pela Evolution envia (02/10/2026).
+  return !canal || canal.provider !== "evolution";
 }
 
 export async function enviarMensagemAction(
@@ -99,6 +101,10 @@ export async function enviarMensagemAction(
   // Citação: gravada logo depois do envio (enviar_mensagem_com_job não foi mexida — ver 0011).
   if (respostaA && resultado?.message_id && !resultado.ja_existia) {
     await supabase.rpc("definir_resposta_mensagem", { p_message_id: resultado.message_id, p_reply_to: respostaA });
+  }
+  // Envia na hora pelo WhatsApp; se falhar, fica pendente e o ciclo da tela tenta de novo.
+  if (resultado?.message_id && !resultado.ja_existia) {
+    await despacharMensagem(resultado.message_id).catch((erro) => console.error("[whatsapp] envio imediato:", erro));
   }
   return { ok: true, message: resultado?.ja_existia ? "Mensagem já enviada." : "Mensagem enviada." };
 }
@@ -283,6 +289,7 @@ export async function reenviarMensagemFalhadaAction(messageId: string, conversat
   const resultado = data?.[0];
   if (!resultado?.ok) return { ok: false, message: resultado?.mensagem ?? "Não foi possível reenfileirar." };
 
+  await despacharMensagem(messageId).catch((erro) => console.error("[whatsapp] reenvio:", erro));
   return { ok: true, message: resultado.mensagem };
 }
 
@@ -307,4 +314,13 @@ export async function vincularClienteConversaAction(conversationId: string, clie
   const { error } = await supabase.rpc("vincular_cliente_conversa", { p_conversation_id: conversationId, p_client_id: clientId });
   if (error) return { ok: false, message: error.message };
   return { ok: true, message: clientId ? "Conversa ligada ao cadastro do cliente." : "Vínculo com o cliente desfeito." };
+}
+
+/**
+ * Re-tenta mensagens de WhatsApp que ficaram pendentes (queda da Evolution, timeout). Chamado pelo ciclo
+ * de atualização da tela de atendimento — substitui o worker separado. Só usuário logado dispara.
+ */
+export async function despacharPendentesAction(): Promise<number> {
+  await getCurrentUserContext();
+  return despacharPendentes(5).catch(() => 0);
 }

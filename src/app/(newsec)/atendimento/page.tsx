@@ -22,7 +22,10 @@ export default async function AtendimentoPage() {
         sintético (herdado do newseccrm) e não deve aparecer em produção até
         ganhar dado real. Ver AGENTS.md: "todo dado exibido tem de ser real".
       */}
-      <TopBar companyName={companyName} />
+      <TopBar
+        companyName={companyName}
+        links={role === "admin" || isPlatformOwner ? [{ href: "/atendimento/canais", label: "Números de WhatsApp" }] : []}
+      />
       <div className="min-h-0 flex-1">
         <AtendimentoWorkspaceReal
           companyId={companyId}

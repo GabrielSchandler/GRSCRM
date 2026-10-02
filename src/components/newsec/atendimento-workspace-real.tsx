@@ -14,6 +14,7 @@ import {
   assumirConversaAction,
   concluirConversaAction,
   criarNotaInternaAction,
+  despacharPendentesAction,
   editarMensagemAction,
   enviarMensagemAction,
   marcarConversaComoLidaAction,
@@ -656,6 +657,8 @@ export function AtendimentoWorkspaceReal({
     await Promise.all([
       carregarConversas({ silencioso: true }),
       carregarContagensAbas(),
+      // Fila de envio do WhatsApp: o que falhou na hora é re-tentado aqui (não há worker separado).
+      despacharPendentesAction().catch(() => 0),
       selecionadaId ? carregarNovidadesDaConversa(selecionadaId) : Promise.resolve(),
     ]);
   };
@@ -752,7 +755,7 @@ export function AtendimentoWorkspaceReal({
   }, [conversaPedidaNaUrl]);
   // Conversa do Totalk (canal sem WhatsApp ligado ao CRM): o envio é bloqueado no servidor; a tela já
   // deixa só "Nota interna", pra ninguém digitar uma resposta e só depois descobrir que não sai.
-  const semWhatsApp = conversaSelecionada?.channel?.provider === "totalk";
+  const semWhatsApp = conversaSelecionada ? conversaSelecionada.channel?.provider !== "evolution" : false;
   const emModoNota = modoNota || semWhatsApp;
 
   // Dono com a conversa aberta: mensagem nova que a atualização automática trouxe já conta como vista.

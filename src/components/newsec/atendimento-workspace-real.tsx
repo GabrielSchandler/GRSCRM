@@ -1,7 +1,7 @@
 "use client";
 
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { AlertTriangle, ArrowLeft, Bot, FileText, Info, Mic, MoreVertical, Paperclip, RefreshCw, Search, Send, Square, StickyNote, Trash2, UserPlus, Users2, X } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Bot, Eye, FileText, Info, MessageSquarePlus, Mic, MoreVertical, Paperclip, RefreshCw, Search, Send, Square, StickyNote, Trash2, Upload, UserPlus, Users2, X } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/browser";
 import { definirFoco } from "@/lib/newsec/notificacoes";
@@ -18,6 +18,7 @@ import {
   editarMensagemAction,
   enviarAnexoAction,
   enviarMensagemAction,
+  iniciarConversaAction,
   marcarConversaComoLidaAction,
   reabrirConversaAction,
   obterLinksAnexosAction,
@@ -238,11 +239,14 @@ export function AtendimentoWorkspaceReal({
   userProfileId,
   isAdminOuManager,
   isPlatformOwner,
+  areaJuridica = false,
 }: {
   companyId: string;
   userProfileId: string;
   isAdminOuManager: boolean;
   isPlatformOwner: boolean;
+  /** Usuário do Jurídico: escreve em qualquer conversa (0013). Comercial só nas dele. */
+  areaJuridica?: boolean;
 }) {
   const supabase = useMemo(() => createClient(), []);
   // A aba "IA" (conversas sem responsável, só a IA atendendo) é visível pra quem supervisiona —
@@ -291,6 +295,8 @@ export function AtendimentoWorkspaceReal({
   const [modoNota, setModoNota] = useState(false);
   const [enviando, setEnviando] = useState(false);
   const [contatosNovos, setContatosNovos] = useState<Set<string>>(new Set());
+  const [novaConversaAberta, setNovaConversaAberta] = useState(false);
+  const [arrastandoArquivo, setArrastandoArquivo] = useState(false);
   // Áudio gravado no navegador e arquivos (foto/vídeo/documento) pro cliente.
   const [gravandoDesde, setGravandoDesde] = useState<number | null>(null);
   const [relogioGravacao, setRelogioGravacao] = useState(0);
@@ -839,23 +845,24 @@ export function AtendimentoWorkspaceReal({
   // Clique num aviso (/atendimento?c=<id>): abre aquela conversa, mesmo que não esteja na lista carregada.
   // Conta como "o dono abriu" — a pessoa clicou pra ver.
   const conversaPedidaNaUrl = useSearchParams().get("c");
-  useEffect(() => {
-    if (!conversaPedidaNaUrl) return;
-    let cancelado = false;
-    supabase
+  async function abrirConversaPorId(id: string, deveContinuar: () => boolean = () => true) {
+    const { data } = await supabase
       .from("conversations")
       .select(SELECT_CONVERSAS)
-      .eq("id", conversaPedidaNaUrl)
+      .eq("id", id)
       .eq("ultima_mensagem.is_internal_note", false)
       .order("created_at", { referencedTable: "ultima_mensagem", ascending: false })
       .limit(1, { referencedTable: "ultima_mensagem" })
-      .maybeSingle()
-      .then(({ data }) => {
-        if (cancelado || !data) return;
-        const conversa = data as unknown as ConversaLista;
-        setConversaFixada(conversa);
-        abrirConversa(conversa);
-      });
+      .maybeSingle();
+    if (!deveContinuar() || !data) return;
+    const conversa = data as unknown as ConversaLista;
+    setConversaFixada(conversa);
+    abrirConversa(conversa);
+  }
+  useEffect(() => {
+    if (!conversaPedidaNaUrl) return;
+    let cancelado = false;
+    void abrirConversaPorId(conversaPedidaNaUrl, () => !cancelado);
     return () => {
       cancelado = true;
     };
@@ -865,6 +872,15 @@ export function AtendimentoWorkspaceReal({
   // deixa só "Nota interna", pra ninguém digitar uma resposta e só depois descobrir que não sai.
   const semWhatsApp = conversaSelecionada ? conversaSelecionada.channel?.provider !== "evolution" : false;
   const emModoNota = modoNota || semWhatsApp;
+  // Quem pode escrever (mensagem e nota): gerente/admin/master, Jurídico, o responsável — ou conversa sem
+  // responsável (aí o banco decide pela equipe). Comercial lendo conversa de outro (pela busca) só lê.
+  const podeEscrever = conversaSelecionada
+    ? isAdminOuManager ||
+      isPlatformOwner ||
+      areaJuridica ||
+      conversaSelecionada.assigned_user_profile_id === null ||
+      conversaSelecionada.assigned_user_profile_id === userProfileId
+    : false;
 
   useEffect(() => {
     if (gravandoDesde === null) return;
@@ -995,9 +1011,13 @@ export function AtendimentoWorkspaceReal({
     }
   }
 
-  async function handleArquivosEscolhidos(lista: FileList) {
+  async function handleArquivosEscolhidos(lista: FileList | File[]) {
     const conversationId = selecionadaId;
     if (!conversationId || lista.length === 0) return;
+    if (!podeEscrever) return mostrarAviso("Você só pode ler esta conversa.");
+    if (emModoNota) {
+      return mostrarAviso(semWhatsApp ? "WhatsApp ainda não ligado a este número: não dá pra enviar arquivo." : "Arquivo vai pro cliente: troque para \"Mensagem\" antes.");
+    }
     const arquivos = Array.from(lista);
     // O texto digitado vai junto, como legenda do primeiro arquivo (igual ao WhatsApp).
     const legenda = (rascunhos[conversationId] ?? "").trim();
@@ -1102,6 +1122,15 @@ export function AtendimentoWorkspaceReal({
         <div className="border-b border-[var(--ns-border)] px-3 pt-3">
           <div className="mb-3 flex items-center justify-between gap-2">
             <h1 className="text-lg font-semibold text-[var(--ns-text)]">Atendimento</h1>
+            <button
+              type="button"
+              onClick={() => setNovaConversaAberta(true)}
+              title="Nova conversa: iniciar com um número"
+              aria-label="Nova conversa"
+              className="ml-auto inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-lg bg-[var(--ns-primary)] px-2 py-1 text-xs font-medium text-[var(--ns-primary-foreground)] hover:opacity-90"
+            >
+              <MessageSquarePlus aria-hidden="true" className="h-3.5 w-3.5" /> Nova
+            </button>
             <button
               type="button"
               onClick={() => void atualizarAgoraRef.current()}
@@ -1240,7 +1269,29 @@ export function AtendimentoWorkspaceReal({
         </div>
       </div>
 
-      <div className={`${conversaSelecionada ? "flex" : "hidden lg:flex"} @container h-full min-w-0 flex-1 flex-col lg:min-w-[420px]`}>
+      <div
+        className={`${conversaSelecionada ? "flex" : "hidden lg:flex"} @container relative h-full min-w-0 flex-1 flex-col lg:min-w-[420px]`}
+        onDragOver={(event) => {
+          if (!conversaSelecionada || !event.dataTransfer.types.includes("Files")) return;
+          event.preventDefault();
+          setArrastandoArquivo(true);
+        }}
+        onDragLeave={(event) => {
+          if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setArrastandoArquivo(false);
+        }}
+        onDrop={(event) => {
+          if (!conversaSelecionada || event.dataTransfer.files.length === 0) return;
+          event.preventDefault();
+          setArrastandoArquivo(false);
+          void handleArquivosEscolhidos(Array.from(event.dataTransfer.files));
+        }}
+      >
+        {arrastandoArquivo && (
+          <div className="pointer-events-none absolute inset-2 z-40 flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-[var(--ns-primary)] bg-[var(--ns-surface)]/90 text-sm font-medium text-[var(--ns-primary)]">
+            <Upload aria-hidden="true" className="h-6 w-6" />
+            {podeEscrever && !emModoNota ? "Solte aqui para enviar ao cliente" : "Não dá pra enviar arquivo nesta conversa"}
+          </div>
+        )}
         {!conversaSelecionada ? (
           <div className="flex flex-1 items-center justify-center text-sm text-[var(--ns-text-secondary)]">
             Selecione uma conversa.
@@ -1603,6 +1654,12 @@ export function AtendimentoWorkspaceReal({
               </div>
             )}
 
+            {!podeEscrever ? (
+              <div className="flex items-center gap-2 border-t border-[var(--ns-border)] bg-[var(--ns-surface-hover)] px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] text-xs text-[var(--ns-text-secondary)]">
+                <Eye aria-hidden="true" className="h-4 w-4 shrink-0" />
+                Somente leitura: esta conversa é de {nomeResponsavel(conversaSelecionada, "outra pessoa")}. Para escrever, peça ao gerente para transferir.
+              </div>
+            ) : (
             <form onSubmit={handleEnviar} className="border-t border-[var(--ns-border)] p-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] sm:p-3">
               {respondendo && (
                 <BarraCitando autor={autorDaMensagem(respondendo)} texto={respondendo.body} onCancelar={() => setRespondendo(null)} />
@@ -1683,6 +1740,13 @@ export function AtendimentoWorkspaceReal({
                   onChange={(event) =>
                     setRascunhos((atual) => ({ ...atual, [selecionadaId ?? ""]: event.target.value }))
                   }
+                  onPaste={(event) => {
+                    // Imagem/arquivo copiado (print, arquivo do Explorer): envia como no WhatsApp.
+                    const colados = Array.from(event.clipboardData.files);
+                    if (colados.length === 0) return;
+                    event.preventDefault();
+                    void handleArquivosEscolhidos(colados);
+                  }}
                   onKeyDown={(event) => {
                     // No celular, Enter pula linha (o teclado do celular não tem Shift fácil) — envia pelo botão.
                     if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing && !ehTelaDeCelular()) {
@@ -1721,9 +1785,24 @@ export function AtendimentoWorkspaceReal({
               </div>
               )}
             </form>
+            )}
           </>
         )}
       </div>
+
+      {novaConversaAberta && (
+        <ModalNovaConversa
+          supabase={supabase}
+          companyId={companyId}
+          onFechar={() => setNovaConversaAberta(false)}
+          onCriada={async (conversationId, mensagem) => {
+            setNovaConversaAberta(false);
+            mostrarAviso(mensagem);
+            await abrirConversaPorId(conversationId);
+            await atualizarListaEContagens();
+          }}
+        />
+      )}
 
       {painelAberto && (
         <button type="button" aria-label="Fechar painel" onClick={() => setPainelAberto(false)} className="fixed inset-0 z-[64] bg-black/40 xl:hidden" />
@@ -1852,6 +1931,123 @@ function LinhaFicha({ rotulo, valor }: { rotulo: string; valor: React.ReactNode 
     <div className="flex items-baseline justify-between gap-2 py-0.5">
       <dt className="shrink-0 text-[12px] text-[var(--ns-text-secondary)]">{rotulo}</dt>
       <dd className="min-w-0 truncate text-right text-[12.5px] text-[var(--ns-text)]">{valor}</dd>
+    </div>
+  );
+}
+
+/** Iniciar conversa com um número que ainda não está no CRM (ou que nunca falou por ele). */
+function ModalNovaConversa({
+  supabase,
+  companyId,
+  onFechar,
+  onCriada,
+}: {
+  supabase: ReturnType<typeof createClient>;
+  companyId: string;
+  onFechar: () => void;
+  onCriada: (conversationId: string, mensagem: string) => void | Promise<void>;
+}) {
+  const [canais, setCanais] = useState<{ id: string; name: string }[] | null>(null);
+  const [canalId, setCanalId] = useState("");
+  const [telefone, setTelefone] = useState("");
+  const [nome, setNome] = useState("");
+  const [erro, setErro] = useState<string | null>(null);
+  const [salvando, setSalvando] = useState(false);
+
+  useEffect(() => {
+    void supabase
+      .from("channels")
+      .select("id, name")
+      .eq("company_id", companyId)
+      .eq("provider", "evolution")
+      .order("name")
+      .then(({ data }) => {
+        setCanais(data ?? []);
+        if (data?.length) setCanalId(data[0].id);
+      });
+  }, [supabase, companyId]);
+
+  async function criar(event: React.FormEvent) {
+    event.preventDefault();
+    if (!canalId || salvando) return;
+    setSalvando(true);
+    setErro(null);
+    const resultado = await iniciarConversaAction(canalId, telefone, nome).catch((e: unknown) => ({
+      ok: false,
+      message: e instanceof Error ? e.message : "Erro ao iniciar a conversa.",
+      conversationId: undefined,
+    }));
+    setSalvando(false);
+    if (!resultado.ok || !resultado.conversationId) return setErro(resultado.message);
+    await onCriada(resultado.conversationId, resultado.message);
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-0 sm:items-center sm:p-4" onClick={onFechar}>
+      <form
+        onSubmit={criar}
+        onClick={(event) => event.stopPropagation()}
+        className="w-full max-w-md rounded-t-2xl bg-[var(--ns-surface)] p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-xl sm:rounded-2xl"
+      >
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="text-base font-semibold text-[var(--ns-text)]">Nova conversa</h2>
+          <button type="button" onClick={onFechar} aria-label="Fechar" className="rounded-md p-1 text-[var(--ns-text-secondary)] hover:bg-[var(--ns-surface-hover)]">
+            <X aria-hidden="true" className="h-4 w-4" />
+          </button>
+        </div>
+        {canais !== null && canais.length === 0 ? (
+          <p className="text-sm text-[var(--ns-text-secondary)]">Nenhum número de WhatsApp conectado ao CRM ainda.</p>
+        ) : (
+          <div className="flex flex-col gap-3">
+            {canais && canais.length > 1 && (
+              <label className="flex flex-col gap-1 text-xs font-medium text-[var(--ns-text-secondary)]">
+                Enviar pelo número
+                <select
+                  value={canalId}
+                  onChange={(event) => setCanalId(event.target.value)}
+                  className="rounded-lg border border-[var(--ns-border)] bg-[var(--ns-surface)] px-3 py-2 text-base text-[var(--ns-text)] md:text-sm"
+                >
+                  {canais.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+            <label className="flex flex-col gap-1 text-xs font-medium text-[var(--ns-text-secondary)]">
+              Celular (com DDD)
+              <input
+                type="tel"
+                inputMode="tel"
+                autoFocus
+                required
+                value={telefone}
+                onChange={(event) => setTelefone(event.target.value)}
+                placeholder="11 91234-5678"
+                className="rounded-lg border border-[var(--ns-border)] bg-[var(--ns-surface)] px-3 py-2 text-base text-[var(--ns-text)] md:text-sm"
+              />
+            </label>
+            <label className="flex flex-col gap-1 text-xs font-medium text-[var(--ns-text-secondary)]">
+              Nome do contato (opcional)
+              <input
+                value={nome}
+                onChange={(event) => setNome(event.target.value)}
+                placeholder="Ex.: Maria Souza"
+                className="rounded-lg border border-[var(--ns-border)] bg-[var(--ns-surface)] px-3 py-2 text-base text-[var(--ns-text)] md:text-sm"
+              />
+            </label>
+            {erro && <p className="rounded-lg bg-[var(--ns-danger)]/10 px-2.5 py-1.5 text-xs text-[var(--ns-danger)]">{erro}</p>}
+            <button
+              type="submit"
+              disabled={salvando || !canalId || !telefone.trim()}
+              className="mt-1 rounded-lg bg-[var(--ns-primary)] px-3 py-2 text-sm font-medium text-[var(--ns-primary-foreground)] hover:opacity-90 disabled:opacity-50"
+            >
+              {salvando ? "Abrindo..." : "Iniciar conversa"}
+            </button>
+          </div>
+        )}
+      </form>
     </div>
   );
 }

@@ -8,10 +8,11 @@ export const metadata: Metadata = {
 };
 
 export default async function AtendimentoPage() {
-  const { userProfileId, companyId, role, isPlatformOwner, activeCompany } = await getCurrentUserContext();
+  const { userProfileId, companyId, role, isPlatformOwner, activeCompany, businessArea } = await getCurrentUserContext();
 
-  // Liberada pra todos os logins em 30/09/2026 e, desde 01/10/2026, no menu do CRM para todos. O que cada um vê continua limitado pelo banco (RLS,
-  // user_can_access_conversation): consultor só enxerga as próprias conversas.
+  // Liberada pra todos os logins em 30/09/2026 e, desde 01/10/2026, no menu do CRM para todos. Desde a 0013 (02/10/2026):
+  // todos LEEM qualquer conversa da empresa (pela busca); Jurídico escreve em todas; Comercial só nas dele — quem
+  // garante é o banco (RLS); a tela só esconde o campo de escrever.
 
   const companyName = activeCompany?.trade_name ?? activeCompany?.legal_name ?? "Empresa";
 
@@ -32,6 +33,7 @@ export default async function AtendimentoPage() {
           userProfileId={userProfileId}
           isAdminOuManager={role === "admin" || role === "manager"}
           isPlatformOwner={Boolean(isPlatformOwner)}
+          areaJuridica={businessArea === "legal"}
         />
       </div>
     </div>

@@ -113,7 +113,7 @@ async function acharCanal(admin: Admin, instancia: string) {
   return data;
 }
 
-async function acharOuCriarContato(admin: Admin, companyId: string, telefone: string, nome: string | null) {
+export async function acharOuCriarContato(admin: Admin, companyId: string, telefone: string, nome: string | null) {
   const { data: existentes } = await admin
     .from("contact_phone_numbers")
     .select("contact_id, phone_e164")

@@ -4,7 +4,7 @@
 // revalidar a rota só fazia o servidor redesenhar a página a cada ação (mais lento, nada muda).
 import { getCurrentUserContext } from "@/lib/auth/current-user";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { despacharMensagem, despacharPendentes } from "@/lib/atendimento/whatsapp";
+import { acharOuCriarContato, despacharMensagem, despacharPendentes } from "@/lib/atendimento/whatsapp";
 
 export type AtendimentoActionState = { ok: boolean; message: string };
 
@@ -433,4 +433,95 @@ export async function vincularClienteConversaAction(conversationId: string, clie
 export async function despacharPendentesAction(): Promise<number> {
   await getCurrentUserContext();
   return despacharPendentes(5).catch(() => 0);
+}
+
+/**
+ * Iniciar conversa com um número (contato novo ou que nunca falou pelo CRM) — pedido do Gabriel, 02/10/2026.
+ * Quem inicia vira o responsável, e é isso que libera o Comercial a escrever nela (0013).
+ *
+ * Se o contato já tem conversa ABERTA nesse número com outra pessoa, não toma: o Comercial recebe o aviso
+ * e abre só pra ler (transferir é com o gerente); Jurídico e gerente abrem e podem escrever nela.
+ * Conversa concluída ou sem responsável passa pra quem iniciou.
+ *
+ * Gravação com a chave de serviço (consultor não tem permissão de criar conversa no banco), depois de
+ * conferir aqui a empresa, o canal e o usuário.
+ */
+export async function iniciarConversaAction(
+  canalId: string,
+  telefone: string,
+  nome: string,
+): Promise<AtendimentoActionState & { conversationId?: string }> {
+  const { supabase, userProfileId, companyId, role, isPlatformOwner, businessArea } = await getCurrentUserContext();
+
+  let digitos = telefone.replace(/\D/g, "");
+  // Sem código do país (DDD + número): Brasil.
+  if (!telefone.trim().startsWith("+") && (digitos.length === 10 || digitos.length === 11)) digitos = `55${digitos}`;
+  if (digitos.length < 12 || digitos.length > 15) return { ok: false, message: "Telefone inválido: use DDD + número (ex.: 11 91234-5678)." };
+
+  // Leitura com a sessão do usuário: só acha canal da empresa dele.
+  const { data: canal } = await supabase.from("channels").select("id, company_id, provider").eq("id", canalId).eq("company_id", companyId).maybeSingle();
+  if (!canal) return { ok: false, message: "Número de WhatsApp não encontrado." };
+  if (canal.provider !== "evolution") return { ok: false, message: AVISO_SEM_WHATSAPP };
+
+  const admin = createAdminClient();
+  const nomeLimpo = nome.trim().slice(0, 120) || null;
+  const contatoId = await acharOuCriarContato(admin, companyId, digitos, nomeLimpo);
+  if (nomeLimpo) {
+    // Contato que já existia sem nome ganha o nome digitado (não troca nome que já tinha).
+    await admin.from("contacts").update({ display_name: nomeLimpo }).eq("id", contatoId).is("display_name", null);
+  }
+
+  const { data: existentes } = await admin
+    .from("conversations")
+    .select("id, status, assigned_user_profile_id, assigned_user_profile:user_profiles!conversations_assigned_user_profile_id_fkey(full_name)")
+    .eq("company_id", companyId)
+    .eq("channel_id", canal.id)
+    .eq("contact_id", contatoId)
+    .order("last_activity_at", { ascending: false })
+    .limit(1);
+  const atual = existentes?.[0] as
+    | { id: string; status: string; assigned_user_profile_id: string | null; assigned_user_profile: { full_name: string | null } | null }
+    | undefined;
+  const agora = new Date().toISOString();
+
+  if (!atual) {
+    const { data: nova, error } = await admin
+      .from("conversations")
+      .insert({ company_id: companyId, channel_id: canal.id, contact_id: contatoId, assigned_user_profile_id: userProfileId, status: "humano", last_activity_at: agora, unread_count: 0 })
+      .select("id")
+      .single();
+    if (error || !nova) return { ok: false, message: `Não foi possível criar a conversa: ${error?.message ?? "erro"}.` };
+    await admin.from("conversation_transfers").insert({ conversation_id: nova.id, company_id: companyId, from_user_profile_id: null, to_user_profile_id: userProfileId, transferred_by: userProfileId, note: "Conversa iniciada pelo CRM" });
+    return { ok: true, message: "Conversa criada. Escreva a primeira mensagem.", conversationId: nova.id };
+  }
+
+  if (atual.assigned_user_profile_id === userProfileId) {
+    if (atual.status === "encerrada") await admin.from("conversations").update({ status: "humano", last_activity_at: agora }).eq("id", atual.id);
+    return { ok: true, message: "Você já atende este contato — conversa aberta.", conversationId: atual.id };
+  }
+
+  const comOutraPessoaAberta = atual.assigned_user_profile_id !== null && atual.status !== "encerrada";
+  if (comOutraPessoaAberta) {
+    const quem = atual.assigned_user_profile?.full_name ?? "outra pessoa";
+    const podeEscrever = role === "admin" || role === "manager" || isPlatformOwner || businessArea === "legal";
+    return {
+      ok: true,
+      message: podeEscrever
+        ? `Este contato já está em atendimento com ${quem}. Conversa aberta.`
+        : `Este contato já está em atendimento com ${quem}. Você pode ler; para escrever, peça ao gerente para transferir.`,
+      conversationId: atual.id,
+    };
+  }
+
+  // Concluída ou sem responsável: passa pra quem iniciou.
+  await admin.from("conversations").update({ assigned_user_profile_id: userProfileId, status: "humano", last_activity_at: agora }).eq("id", atual.id);
+  await admin.from("conversation_transfers").insert({
+    conversation_id: atual.id,
+    company_id: companyId,
+    from_user_profile_id: atual.assigned_user_profile_id,
+    to_user_profile_id: userProfileId,
+    transferred_by: userProfileId,
+    note: "Conversa iniciada pelo CRM",
+  });
+  return { ok: true, message: "Conversa aberta. Escreva a mensagem.", conversationId: atual.id };
 }

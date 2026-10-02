@@ -9,7 +9,7 @@ export default async function AuthenticatedLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const { userProfileId, companyId } = await getCurrentUserContext();
+  const { userProfileId, companyId, role, isPlatformOwner } = await getCurrentUserContext();
 
   return (
     <AuthenticatedShell
@@ -22,7 +22,7 @@ export default async function AuthenticatedLayout({
     >
       {children}
       {/* Aviso de mensagem nova (WhatsApp e chat interno) também nas telas do CRM antigo. */}
-      <Notificador userProfileId={userProfileId} companyId={companyId} oferecerAvisoWindows />
+      <Notificador userProfileId={userProfileId} companyId={companyId} supervisiona={role === "admin" || role === "manager" || Boolean(isPlatformOwner)} oferecerAvisoWindows />
     </AuthenticatedShell>
   );
 }

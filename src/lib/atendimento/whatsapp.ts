@@ -1,6 +1,12 @@
 import "server-only";
+import { after } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { baixarMidia, enviarAudio, enviarMidia, enviarTexto, ErroEvolution, lerTexto } from "./evolution";
+import { CONFIG_IA } from "./ia/prompt";
+import { executarTurnoIa, iaAtendimentoLigada } from "./ia/turno";
+
+/** Conversa sem responsável: com a IA ligada, vai pra ela (aba "IA"); senão, pra fila da equipe. */
+const statusSemDono = () => (iaAtendimentoLigada() ? "ia" : "aguardando_humano");
 
 /**
  * WhatsApp real no atendimento do CRM (Evolution API, mesma instalação do NewSec Chat).
@@ -150,7 +156,7 @@ async function acharOuCriarConversa(admin: Admin, companyId: string, canalId: st
   if (atual) {
     // Cliente voltou a escrever numa conversa concluída: reabre com o mesmo dono.
     if (entrada && atual.status === "encerrada") {
-      await admin.from("conversations").update({ status: atual.assigned_user_profile_id ? "humano" : "aguardando_humano" }).eq("id", atual.id);
+      await admin.from("conversations").update({ status: atual.assigned_user_profile_id ? "humano" : statusSemDono() }).eq("id", atual.id);
     }
     return atual.id as string;
   }
@@ -172,7 +178,7 @@ async function acharOuCriarConversa(admin: Admin, companyId: string, canalId: st
       contact_id: contatoId,
       client_id: anterior?.[0]?.client_id ?? null,
       assigned_user_profile_id: dono,
-      status: dono ? "humano" : "aguardando_humano",
+      status: dono ? "humano" : statusSemDono(),
       last_activity_at: new Date().toISOString(),
       unread_count: 0,
     })
@@ -282,7 +288,7 @@ export async function processarEventoEvolution(carga: unknown): Promise<string> 
   if (error || !inserida) throw new Error(`gravar mensagem: ${error?.message}`);
 
   const previa = conteudo.texto?.slice(0, 200) ?? `[${conteudo.tipo}]`;
-  const { data: conversa } = await admin.from("conversations").select("unread_count").eq("id", conversaId).single();
+  const { data: conversa } = await admin.from("conversations").select("unread_count, status").eq("id", conversaId).single();
   await admin
     .from("conversations")
     .update({
@@ -293,6 +299,17 @@ export async function processarEventoEvolution(carga: unknown): Promise<string> 
     .eq("id", conversaId);
 
   if (conteudo.temMidia) await guardarMidia(admin, instancia, idWhatsapp, canal.company_id, conversaId, inserida.id, conteudo);
+
+  // Conversa com a IA: ela responde DEPOIS de a Evolution receber o "ok" (after), pra o aviso não ficar
+  // esperando a OpenAI. O turno espera uns segundos pra juntar mensagens seguidas do cliente.
+  if (!doProprioNumero && conversa?.status === "ia") {
+    const mensagemId = inserida.id as string;
+    after(() =>
+      executarTurnoIa(conversaId, mensagemId, despacharMensagem)
+        .then((resultado) => console.log(`[ia] ${conversaId}: ${resultado}`))
+        .catch((erro) => console.error(`[ia] ${conversaId}:`, erro)),
+    );
+  }
   return "gravada";
 }
 
@@ -331,7 +348,7 @@ async function processarJob(admin: Admin, job: Job) {
 
   const { data: mensagem } = await admin
     .from("messages")
-    .select("body, message_type, author_user_profile_id, author:user_profiles!messages_author_user_profile_id_fkey(full_name)")
+    .select("body, message_type, author_type, author_user_profile_id, author:user_profiles!messages_author_user_profile_id_fkey(full_name)")
     .eq("id", job.message_id)
     .single();
   const autor = (mensagem as unknown as { author: { full_name: string | null } | null })?.author;
@@ -339,7 +356,9 @@ async function processarJob(admin: Admin, job: Job) {
   const tipo = (mensagem as { message_type?: string } | null)?.message_type ?? "texto";
   // Primeiro nome do campo "Nome" do cadastro, como era no Totalk ("*Mariza:*"). O apelido não serve:
   // em alguns cadastros ele é igual ao login (ex.: "gabriel.schandler").
-  const nome = NOME_NA_ASSINATURA[autorId ?? ""] ?? (autor?.full_name?.trim().split(/\s+/)[0] || null);
+  // Resposta da IA sai assinada com o nome dela ("*Ana:*").
+  const daIa = (mensagem as { author_type?: string } | null)?.author_type === "ia";
+  const nome = daIa ? CONFIG_IA.nome : (NOME_NA_ASSINATURA[autorId ?? ""] ?? (autor?.full_name?.trim().split(/\s+/)[0] || null));
   // Mesmo formato que o cliente já via no Totalk e que o NewSec Chat usa: nome em negrito em cima.
   const texto = nome ? `*${nome}:*\n${mensagem?.body ?? ""}` : (mensagem?.body ?? "");
 

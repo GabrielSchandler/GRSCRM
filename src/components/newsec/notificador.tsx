@@ -45,11 +45,14 @@ export function Notificador({
   userProfileId,
   companyId,
   oferecerAvisoWindows = false,
+  supervisiona = false,
 }: {
   userProfileId: string;
   companyId: string;
   /** No CRM antigo não há o sino da barra do topo — mostra um botão próprio pra ativar o aviso do Windows. */
   oferecerAvisoWindows?: boolean;
+  /** Gerente/admin/master: também é avisado quando um cliente cai na fila sem responsável (ex.: a IA passou pra equipe). */
+  supervisiona?: boolean;
 }) {
   const [pedidoDispensado, setPedidoDispensado] = useState(true);
   useEffect(() => {
@@ -75,7 +78,7 @@ export function Notificador({
   }
   const router = useRouter();
   const estado = useSyncExternalStore(assinarNotificacoes, lerNotificacoes, lerNotificacoesNoServidor);
-  const anteriorRef = useRef<{ whatsapp: Map<string, number>; interno: Map<string, number>; em: number } | null>(null);
+  const anteriorRef = useRef<{ whatsapp: Map<string, number>; interno: Map<string, number>; fila: Set<string>; em: number } | null>(null);
 
   // O navegador só deixa tocar som depois de um clique/tecla na página: prepara o áudio no 1º gesto.
   useEffect(() => {
@@ -93,7 +96,7 @@ export function Notificador({
     let cancelado = false;
 
     async function conferir() {
-      const [whatsapp, interno] = await Promise.all([
+      const [whatsapp, interno, fila] = await Promise.all([
         supabase
           .from("conversations")
           .select("id, unread_count, last_message_preview, contact:contacts(display_name)", { count: "exact" })
@@ -104,6 +107,18 @@ export function Notificador({
           .limit(30),
         // Se a migração do chat interno ainda não estiver aplicada, só não conta (erro ignorado).
         supabase.rpc("listar_conversas_internas"),
+        // Fila sem responsável (a IA passou pra equipe, ou chegou contato sem IA): quem supervisiona distribui.
+        supervisiona
+          ? supabase
+              .from("conversations")
+              .select("id, unread_count, last_message_preview, contact:contacts(display_name)")
+              .eq("company_id", companyId)
+              .eq("status", "aguardando_humano")
+              .is("assigned_user_profile_id", null)
+              .gt("unread_count", 0)
+              .order("last_activity_at", { ascending: false })
+              .limit(30)
+          : Promise.resolve({ data: [] as unknown[], error: null }),
       ]);
       if (cancelado) return;
 
@@ -112,6 +127,7 @@ export function Notificador({
       const atual = {
         whatsapp: new Map(listaWhatsapp.map((c) => [c.id, c.unread_count])),
         interno: new Map(listaInterno.map((t) => [t.thread_id, t.nao_lidas])),
+        fila: new Set(((fila.data ?? []) as unknown as ConversaComNaoLida[]).map((c) => c.id)),
         em: Date.now(),
       };
       atualizarNotificacoes({
@@ -151,6 +167,17 @@ export function Notificador({
           tipo: "whatsapp",
           titulo: transferida ? `Contato novo · ${c.contact?.display_name ?? "Cliente"}` : (c.contact?.display_name ?? "Cliente"),
           texto: transferida ? `Transferido para você${quem ? ` por ${quem}` : ""}` : previa(c.last_message_preview),
+          href: `/atendimento?c=${c.id}`,
+          em: Date.now(),
+        });
+      }
+      for (const c of (fila.data ?? []) as unknown as ConversaComNaoLida[]) {
+        if (anterior.fila.has(c.id)) continue;
+        novos.push({
+          id: `c:${c.id}:${Date.now()}`,
+          tipo: "whatsapp",
+          titulo: `Cliente esperando atendimento · ${c.contact?.display_name ?? "Cliente"}`,
+          texto: "Sem responsável — abra para assumir ou transferir.",
           href: `/atendimento?c=${c.id}`,
           em: Date.now(),
         });
@@ -220,7 +247,7 @@ export function Notificador({
       if (intervalo !== undefined) window.clearInterval(intervalo);
       document.removeEventListener("visibilitychange", aoVoltar);
     };
-  }, [companyId, userProfileId, router]);
+  }, [companyId, userProfileId, router, supervisiona]);
 
   // Total no título da aba do navegador.
   const total = estado.naoLidasAtendimento + estado.naoLidasInterno;

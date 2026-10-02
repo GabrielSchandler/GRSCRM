@@ -74,6 +74,19 @@ async function canalSemWhatsApp(supabase: Awaited<ReturnType<typeof getCurrentUs
   return !canal || canal.provider !== "evolution";
 }
 
+/**
+ * Alguém da equipe escreveu ao cliente numa conversa que estava com a IA: a IA para (o turno dela relê o
+ * status antes de responder) e a conversa fica com quem escreveu.
+ */
+async function equipeAssumeDaIa(conversationId: string, userProfileId: string) {
+  await createAdminClient()
+    .from("conversations")
+    .update({ status: "humano", assigned_user_profile_id: userProfileId })
+    .eq("id", conversationId)
+    .eq("status", "ia")
+    .is("assigned_user_profile_id", null);
+}
+
 export async function enviarMensagemAction(
   conversationId: string,
   texto: string,
@@ -104,6 +117,7 @@ export async function enviarMensagemAction(
   }
   // Envia na hora pelo WhatsApp; se falhar, fica pendente e o ciclo da tela tenta de novo.
   if (resultado?.message_id && !resultado.ja_existia) {
+    await equipeAssumeDaIa(conversationId, userProfileId);
     await despacharMensagem(resultado.message_id).catch((erro) => console.error("[whatsapp] envio imediato:", erro));
   }
   return { ok: true, message: resultado?.ja_existia ? "Mensagem já enviada." : "Mensagem enviada." };
@@ -186,6 +200,7 @@ export async function enviarAnexoAction(
     });
     if (erroAnexo) return { ok: false, message: `Não foi possível registrar o arquivo: ${erroAnexo.message}.` };
     if (respostaA) await supabase.rpc("definir_resposta_mensagem", { p_message_id: resultado.message_id, p_reply_to: respostaA });
+    await equipeAssumeDaIa(conversationId, userProfileId);
     await despacharMensagem(resultado.message_id).catch((erro) => console.error("[whatsapp] envio imediato:", erro));
   }
   const rotulo = { audio: "Áudio enviado", imagem: "Foto enviada", video: "Vídeo enviado", documento: "Arquivo enviado" }[tipoMensagem];

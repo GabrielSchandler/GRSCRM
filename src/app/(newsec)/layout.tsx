@@ -6,7 +6,7 @@ import { getCurrentUserContext } from "@/lib/auth/current-user";
 
 export default async function NewSecLayout({ children }: { children: React.ReactNode }) {
   // Pro avisador de mensagens (som/aviso/título) — roda em todas as telas do shell novo.
-  const { userProfileId, companyId } = await getCurrentUserContext();
+  const { userProfileId, companyId, role, isPlatformOwner } = await getCurrentUserContext();
 
   return (
     <div
@@ -39,7 +39,7 @@ export default async function NewSecLayout({ children }: { children: React.React
       </div>
 
       <div className="flex min-w-0 flex-1 flex-col bg-[var(--ns-bg)]">{children}</div>
-      <Notificador userProfileId={userProfileId} companyId={companyId} />
+      <Notificador userProfileId={userProfileId} companyId={companyId} supervisiona={role === "admin" || role === "manager" || Boolean(isPlatformOwner)} />
     </div>
   );
 }

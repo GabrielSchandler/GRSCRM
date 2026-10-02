@@ -7,7 +7,7 @@ import { createClient } from "@/lib/supabase/browser";
 import { definirFoco } from "@/lib/newsec/notificacoes";
 import type { ConversaEstado, ConversationStatus, Message, MessageRevision } from "@/types/atendimento";
 import { AcoesMensagem, AvisoMensagemApagada, EditorMensagem, HistoricoRevisoes, permissoesDaMensagem } from "./mensagem-revisoes";
-import { BarraCitando, BotaoResponder, BuscaNaConversa, CitacaoNaBolha, ehTelaDeCelular, ehTelaEstreita, irAteMensagem, Tiques, type ResultadoBusca } from "./chat-comum";
+import { BarraCitando, BotaoResponder, BuscaNaConversa, CitacaoNaBolha, ehTelaDeCelular, irAteMensagem, Tiques, type ResultadoBusca } from "./chat-comum";
 import { VinculoCliente } from "./vinculo-cliente";
 import {
   apagarMensagemAction,
@@ -750,12 +750,8 @@ export function AtendimentoWorkspaceReal({
     if (selecionadaId) carregarMensagens(selecionadaId);
   }, [selecionadaId, carregarMensagens]);
 
-  useEffect(() => {
-    // No celular a lista é a primeira tela; abrir a 1ª conversa sozinho esconderia a lista.
-    if (!selecionadaId && conversas && conversas.length > 0 && !ehTelaEstreita()) {
-      setSelecionadaId(conversas[0].id);
-    }
-  }, [conversas, selecionadaId]);
+  // Não abre conversa sozinho ao entrar ou recarregar (pedido do Gabriel, 02/10/2026: consultores viam a
+  // 1ª conversa aberta e achavam que ela tinha sido lida). Conversa só abre com clique (ou link de aviso).
 
   function voltarParaLista() {
     abertaPeloDonoRef.current = null;
@@ -863,6 +859,10 @@ export function AtendimentoWorkspaceReal({
     if (!conversaPedidaNaUrl) return;
     let cancelado = false;
     void abrirConversaPorId(conversaPedidaNaUrl, () => !cancelado);
+    // Tira o "?c=" do endereço: recarregar a página depois não reabre (nem marca como lida) essa conversa.
+    const url = new URL(window.location.href);
+    url.searchParams.delete("c");
+    window.history.replaceState(window.history.state, "", url.pathname + url.search + url.hash);
     return () => {
       cancelado = true;
     };

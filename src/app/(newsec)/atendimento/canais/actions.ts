@@ -13,6 +13,7 @@ import {
   pedirQrCode,
   type EstadoConexao,
 } from "@/lib/atendimento/evolution";
+import { PREFIXO_CANAL_EXISTENTE } from "@/lib/atendimento/whatsapp";
 
 // Conectar número de WhatsApp ao CRM (02/10/2026). Só administrador da empresa ou master.
 // Conectar/trocar os números que hoje estão no Totalk é decisão do Gabriel, no dia que ele escolher.
@@ -111,12 +112,47 @@ async function instanciaDoCanal(canalId: string) {
   const admin = createAdminClient();
   const { data } = await admin
     .from("channels")
-    .select("id, provider, provider_channel_external_id, status")
+    .select("id, name, provider, provider_channel_external_id, status")
     .eq("id", canalId)
     .eq("company_id", companyId)
     .maybeSingle();
-  if (!data || data.provider !== "evolution" || !data.provider_channel_external_id) throw new Error("Canal não encontrado ou não é de WhatsApp conectado.");
-  return { admin, canal: data, instancia: data.provider_channel_external_id as string };
+  if (!data) throw new Error("Canal não encontrado.");
+  if (data.provider === "evolution" && data.provider_channel_external_id) {
+    return { admin, canal: data, instancia: data.provider_channel_external_id as string };
+  }
+  // Canal do Totalk sendo conectado: a instância leva o id do canal no nome.
+  if (data.provider === "totalk" && numeroDoNome(data.name as string)) {
+    return { admin, canal: data, instancia: `${PREFIXO_CANAL_EXISTENTE}${data.id}` };
+  }
+  throw new Error("Este canal não tem um número de WhatsApp para conectar.");
+}
+
+/** "WhatsApp (11) 93916-2511" -> "11939162511". */
+function numeroDoNome(nome: string) {
+  const d = nome.replace(/\D/g, "");
+  return d.length >= 10 ? d : null;
+}
+
+/**
+ * Conecta, no MESMO canal, um número que era do Totalk: o histórico e o dono de cada conversa ficam
+ * onde estão. Só vira canal "evolution" quando o celular conecta E o número confere com o do canal.
+ */
+export async function conectarCanalExistenteAction(canalId: string): Promise<Resultado<{ qrCode: string | null }>> {
+  try {
+    const { canal, instancia } = await instanciaDoCanal(canalId);
+    if (canal.provider !== "totalk") throw new Error("Este canal já é do WhatsApp do CRM — use \"Ler QR Code\".");
+    if (!evolutionConfigurada()) throw new Error("WhatsApp não configurado no servidor (EVOLUTION_API_URL/EVOLUTION_API_KEY).");
+    const webhook = await urlDoWebhook();
+    if ((await estadoConexao(instancia)) === "desconectado") {
+      await criarInstancia(instancia, webhook).catch(async () => configurarWebhook(instancia, webhook)); // já existia: só reaponta o aviso
+    } else {
+      await configurarWebhook(instancia, webhook);
+    }
+    const { qrCode } = await pedirQrCode(instancia);
+    return { ok: true, dados: { qrCode } };
+  } catch (erro) {
+    return { ok: false, mensagem: erro instanceof Error ? erro.message : String(erro) };
+  }
 }
 
 export async function qrCodeAction(canalId: string): Promise<Resultado<{ estado: EstadoConexao; qrCode: string | null }>> {
@@ -137,6 +173,21 @@ export async function statusCanalAction(canalId: string): Promise<Resultado<{ es
     let numero: string | null = null;
     if (estado === "conectado") {
       numero = await numeroConectado(instancia).catch(() => null);
+      if (canal.provider === "totalk") {
+        // Trava: o celular que leu o QR tem que ser o número DESTE canal.
+        const esperado = numeroDoNome(canal.name as string)!;
+        const lido = (numero ?? "").replace(/^55/, "");
+        const confere = lido === esperado || lido === esperado.slice(0, 2) + esperado.slice(3) || lido.slice(0, 2) + "9" + lido.slice(2) === esperado;
+        if (!confere) {
+          await desconectarInstancia(instancia).catch(() => undefined);
+          throw new Error(`O celular que leu o QR Code é o número +${numero ?? "?"}, não o deste canal (${canal.name}). A conexão foi desfeita.`);
+        }
+        await admin
+          .from("channels")
+          .update({ provider: "evolution", provider_channel_external_id: instancia, status: "active", updated_at: new Date().toISOString() })
+          .eq("id", canalId);
+        return { ok: true, dados: { estado, numero } };
+      }
       if (canal.status !== "active") {
         await admin
           .from("channels")

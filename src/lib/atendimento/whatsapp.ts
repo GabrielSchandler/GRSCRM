@@ -94,7 +94,16 @@ function extrairConteudo(mensagem: Record<string, unknown>): ConteudoMensagem | 
   return null; // reação, protocolo, enquete... nada a guardar
 }
 
+/** Instância criada pra conectar um canal que JÁ existia (número do Totalk): "grscrm-ch-<id do canal>". */
+export const PREFIXO_CANAL_EXISTENTE = "grscrm-ch-";
+
 async function acharCanal(admin: Admin, instancia: string) {
+  if (instancia.startsWith(PREFIXO_CANAL_EXISTENTE)) {
+    // Achado pelo id no nome da instância — funciona já no segundo em que o celular conecta, antes
+    // de a tela virar o canal para "evolution" (assim nenhuma mensagem desse intervalo se perde).
+    const { data } = await admin.from("channels").select("id, company_id, name").eq("id", instancia.slice(PREFIXO_CANAL_EXISTENTE.length)).maybeSingle();
+    return data;
+  }
   const { data } = await admin
     .from("channels")
     .select("id, company_id, name")

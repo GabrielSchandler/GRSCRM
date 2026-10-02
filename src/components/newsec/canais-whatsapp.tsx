@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { CheckCircle2, Loader2, Plus, QrCode, RefreshCw, Smartphone, Unplug, X } from "lucide-react";
 import {
+  conectarCanalExistenteAction,
   criarCanalAction,
   desconectarCanalAction,
   listarCanaisAction,
@@ -44,7 +45,12 @@ export function CanaisWhatsapp() {
     const canalId = conectando.canalId;
     const status = window.setInterval(async () => {
       const r = await statusCanalAction(canalId);
-      if (r.ok && r.dados.estado === "conectado") {
+      if (!r.ok) {
+        setErro(r.mensagem);
+        setConectando(null);
+        return;
+      }
+      if (r.dados.estado === "conectado") {
         setConectando((atual) => (atual?.canalId === canalId ? { ...atual, estado: "conectado", numero: r.dados.numero } : atual));
         void carregar();
       }
@@ -76,6 +82,21 @@ export function CanaisWhatsapp() {
     const r = await qrCodeAction(canalId);
     if (!r.ok) return setErro(r.mensagem);
     setConectando({ canalId, qrCode: r.dados.qrCode, estado: r.dados.estado });
+  }
+
+  async function conectarExistente(canal: CanalWhatsapp) {
+    const ok = window.confirm(
+      `Conectar ${canal.nome} ao CRM?
+
+• Leia o QR Code com o celular DESSE número (se for outro número, a conexão é desfeita).
+• As conversas e os donos do histórico continuam iguais.
+• Depois de conectado, este número para de ser importado do Totalk — as mensagens passam a chegar direto aqui.`,
+    );
+    if (!ok) return;
+    setErro(null);
+    const r = await conectarCanalExistenteAction(canal.id);
+    if (!r.ok) return setErro(r.mensagem);
+    setConectando({ canalId: canal.id, qrCode: r.dados.qrCode, estado: "conectando" });
   }
 
   async function desconectar(canal: CanalWhatsapp) {
@@ -134,6 +155,11 @@ export function CanaisWhatsapp() {
             >
               {ROTULO_ESTADO[c.estado]}
             </span>
+            {c.provedor === "totalk" && /\d{8}/.test(c.nome.replace(/\D/g, "")) && configurado && (
+              <button type="button" onClick={() => void conectarExistente(c)} className="inline-flex items-center gap-1 rounded-lg bg-[var(--ns-primary)] px-2.5 py-1.5 text-xs font-medium text-[var(--ns-primary-foreground)]">
+                <QrCode aria-hidden="true" className="h-3.5 w-3.5" /> Conectar este número
+              </button>
+            )}
             {c.provedor === "evolution" && c.estado !== "conectado" && (
               <button type="button" onClick={() => void reconectar(c.id)} className="inline-flex items-center gap-1 rounded-lg border border-[var(--ns-border)] px-2.5 py-1.5 text-xs text-[var(--ns-text)] hover:bg-[var(--ns-surface-hover)]">
                 <QrCode aria-hidden="true" className="h-3.5 w-3.5" /> Ler QR Code

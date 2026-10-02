@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ThemeScript } from "@/components/newsec/theme-script";
 import { NewSecSidebarNav } from "@/components/newsec/sidebar-nav";
 import { Notificador } from "@/components/newsec/notificador";
+import { iaAtendimentoLigada } from "@/lib/atendimento/ia/turno";
 import { getCurrentUserContext } from "@/lib/auth/current-user";
 
 export default async function NewSecLayout({ children }: { children: React.ReactNode }) {
@@ -39,7 +40,7 @@ export default async function NewSecLayout({ children }: { children: React.React
       </div>
 
       <div className="flex min-w-0 flex-1 flex-col bg-[var(--ns-bg)]">{children}</div>
-      <Notificador userProfileId={userProfileId} companyId={companyId} supervisiona={role === "admin" || role === "manager" || Boolean(isPlatformOwner)} />
+      <Notificador userProfileId={userProfileId} companyId={companyId} supervisiona={role === "admin" || role === "manager" || Boolean(isPlatformOwner)} iaLigada={iaAtendimentoLigada()} />
     </div>
   );
 }

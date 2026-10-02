@@ -46,6 +46,7 @@ export function Notificador({
   companyId,
   oferecerAvisoWindows = false,
   supervisiona = false,
+  iaLigada = true,
 }: {
   userProfileId: string;
   companyId: string;
@@ -53,6 +54,8 @@ export function Notificador({
   oferecerAvisoWindows?: boolean;
   /** Gerente/admin/master: também é avisado quando um cliente cai na fila sem responsável (ex.: a IA passou pra equipe). */
   supervisiona?: boolean;
+  /** IA do atendimento ligada? Desligada, a aba IA também conta como fila pros gerentes. */
+  iaLigada?: boolean;
 }) {
   const [pedidoDispensado, setPedidoDispensado] = useState(true);
   useEffect(() => {
@@ -111,9 +114,10 @@ export function Notificador({
         supervisiona
           ? supabase
               .from("conversations")
-              .select("id, unread_count, last_message_preview, contact:contacts(display_name)")
+              .select("id, status, unread_count, last_message_preview, contact:contacts(display_name)")
               .eq("company_id", companyId)
-              .eq("status", "aguardando_humano")
+              // IA desligada: contato novo fica na aba IA sem ninguém respondendo — também é fila.
+              .in("status", iaLigada ? ["aguardando_humano"] : ["aguardando_humano", "ia"])
               .is("assigned_user_profile_id", null)
               .gt("unread_count", 0)
               .order("last_activity_at", { ascending: false })
@@ -173,11 +177,12 @@ export function Notificador({
       }
       for (const c of (fila.data ?? []) as unknown as ConversaComNaoLida[]) {
         if (anterior.fila.has(c.id)) continue;
+        const naAbaIa = (c as { status?: string }).status === "ia";
         novos.push({
           id: `c:${c.id}:${Date.now()}`,
           tipo: "whatsapp",
-          titulo: `Cliente esperando atendimento · ${c.contact?.display_name ?? "Cliente"}`,
-          texto: "Sem responsável — abra para assumir ou transferir.",
+          titulo: `${naAbaIa ? "Contato novo na aba IA" : "Cliente esperando atendimento"} · ${c.contact?.display_name ?? "Cliente"}`,
+          texto: naAbaIa ? "IA desligada: ninguém respondeu ainda — abra para assumir." : "Sem responsável — abra para assumir ou transferir.",
           href: `/atendimento?c=${c.id}`,
           em: Date.now(),
         });
@@ -247,7 +252,7 @@ export function Notificador({
       if (intervalo !== undefined) window.clearInterval(intervalo);
       document.removeEventListener("visibilitychange", aoVoltar);
     };
-  }, [companyId, userProfileId, router, supervisiona]);
+  }, [companyId, userProfileId, router, supervisiona, iaLigada]);
 
   // Total no título da aba do navegador.
   const total = estado.naoLidasAtendimento + estado.naoLidasInterno;

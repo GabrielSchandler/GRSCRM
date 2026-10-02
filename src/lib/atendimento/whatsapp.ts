@@ -3,10 +3,13 @@ import { after } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { baixarMidia, enviarAudio, enviarMidia, enviarTexto, ErroEvolution, lerTexto } from "./evolution";
 import { CONFIG_IA } from "./ia/prompt";
-import { executarTurnoIa, iaAtendimentoLigada } from "./ia/turno";
+import { executarTurnoIa } from "./ia/turno";
 
-/** Conversa sem responsável: com a IA ligada, vai pra ela (aba "IA"); senão, pra fila da equipe. */
-const statusSemDono = () => (iaAtendimentoLigada() ? "ia" : "aguardando_humano");
+/**
+ * Conversa sem responsável vai SEMPRE pra aba "IA", mesmo com a IA desligada (pedido do Gabriel,
+ * 02/10/2026). Desligada, ninguém responde sozinho: os gerentes recebem o aviso (Notificador) pra assumir.
+ */
+const statusSemDono = () => "ia";
 
 /**
  * WhatsApp real no atendimento do CRM (Evolution API, mesma instalação do NewSec Chat).

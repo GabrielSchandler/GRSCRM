@@ -2,6 +2,7 @@ import { AuthenticatedShell } from "@/components/layout/authenticated-shell";
 import { AppSidebar } from "@/components/layout/app-sidebar";
 import { getCurrentUserContext } from "@/lib/auth/current-user";
 import { Notificador } from "@/components/newsec/notificador";
+import { iaAtendimentoLigada } from "@/lib/atendimento/ia/turno";
 import packageJson from "../../../package.json";
 
 export default async function AuthenticatedLayout({
@@ -22,7 +23,7 @@ export default async function AuthenticatedLayout({
     >
       {children}
       {/* Aviso de mensagem nova (WhatsApp e chat interno) também nas telas do CRM antigo. */}
-      <Notificador userProfileId={userProfileId} companyId={companyId} supervisiona={role === "admin" || role === "manager" || Boolean(isPlatformOwner)} oferecerAvisoWindows />
+      <Notificador userProfileId={userProfileId} companyId={companyId} supervisiona={role === "admin" || role === "manager" || Boolean(isPlatformOwner)} iaLigada={iaAtendimentoLigada()} oferecerAvisoWindows />
     </AuthenticatedShell>
   );
 }

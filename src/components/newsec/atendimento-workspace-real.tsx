@@ -361,9 +361,9 @@ export function AtendimentoWorkspaceReal({
     setErroLista(null);
 
     // Busca vai no BANCO, não só nas 50 conversas já carregadas — antes, procurar um telefone
-    // de alguém fora da lista inicial não achava nada (relatado pelo Gabriel, 30/09/2026). Desde
-    // 02/10/2026 a busca RESPEITA a aba e os filtros (pedido do Gabriel): em "Meus" procura só nas
-    // conversas da pessoa. A RLS do banco continua sendo a trava de verdade.
+    // de alguém fora da lista inicial não achava nada (relatado pelo Gabriel, 30/09/2026). Com busca
+    // ativa, abas e filtros SOMEM e a busca vale pra todas as conversas que a pessoa pode ver (pedido do
+    // Gabriel, 02/10/2026). Consultor continua vendo só as dele: quem garante é a RLS do banco.
     const termo = buscaAplicada.trim();
     let query = supabase.from("conversations").select(SELECT_CONVERSAS);
     if (termo.length >= 2) {
@@ -391,15 +391,16 @@ export function AtendimentoWorkspaceReal({
         setCarregandoLista(false);
         return;
       }
-      query = query.in("contact_id", [...contatoIds]);
+      query = query.eq("company_id", companyId).in("contact_id", [...contatoIds]);
+    } else {
+      query = comEscopoDaAba(query, aba);
+      // Sub-filtros no BANCO (antes filtravam só as 50 já carregadas — "Não lidas 17" eram 17 de 50).
+      if (aba !== "ia" && subFiltro === "nao_lidas") query = query.gt("unread_count", 0);
+      if (aba !== "ia" && subFiltro === "aguardando_resposta") query = query.eq("unread_count", 0).neq("status", "encerrada");
     }
-    query = comEscopoDaAba(query, aba);
-    // Sub-filtros no BANCO (antes filtravam só as 50 já carregadas — "Não lidas 17" eram 17 de 50).
-    if (aba !== "ia" && subFiltro === "nao_lidas") query = query.gt("unread_count", 0);
-    if (aba !== "ia" && subFiltro === "aguardando_resposta") query = query.eq("unread_count", 0).neq("status", "encerrada");
 
     // "Aguardando resposta" ainda depende de quem falou por último (conferido na tela), então pede uma janela maior.
-    const limite = aba !== "ia" && subFiltro === "aguardando_resposta" ? Math.max(limiteLista, 200) : limiteLista;
+    const limite = termo.length < 2 && aba !== "ia" && subFiltro === "aguardando_resposta" ? Math.max(limiteLista, 200) : limiteLista;
     const { data, error } = await query
       .eq("ultima_mensagem.is_internal_note", false)
       .order("created_at", { referencedTable: "ultima_mensagem", ascending: false })
@@ -956,13 +957,17 @@ export function AtendimentoWorkspaceReal({
           <input
             type="search"
             value={busca}
-            onChange={(event) => setBusca(event.target.value)}
+            onChange={(event) => {
+              // Começou a buscar: zera os filtros (eles somem enquanto houver busca).
+              if (!busca.trim() && event.target.value.trim()) setSubFiltro("todas");
+              setBusca(event.target.value);
+            }}
             placeholder="Buscar por nome ou telefone..."
             className="w-full rounded-lg border border-[var(--ns-border)] bg-[var(--ns-surface)] px-3 py-2 text-sm text-[var(--ns-text)] outline-none placeholder:text-[var(--ns-text-secondary)] focus-visible:ring-2 focus-visible:ring-[var(--ns-primary)]"
           />
           {buscaAplicada.trim().length >= 2 && (
             <p className="-mt-1 text-[11px] text-[var(--ns-text-secondary)]">
-              Buscando em todas as conversas desta aba e filtro, não só nas carregadas.
+              Buscando em todas as conversas, sem filtro. Apague a busca para voltar às abas.
             </p>
           )}
           {/* Pergunta 1: de quem é a conversa? "Outros" é o atendimento humano de outro login (atribuído a
@@ -970,7 +975,7 @@ export function AtendimentoWorkspaceReal({
               porque quem supervisiona pode ver conversa de qualquer equipe aqui, não só a própria. "IA" só
               existe pra quem supervisiona — quem atende comum não vê conversa de ninguém além da própria
               (RLS já garante isso; aqui é só não oferecer a aba). */}
-          {abasVisiveis.length > 1 && (
+          {!busca.trim() && abasVisiveis.length > 1 && (
           <div className="flex gap-1 rounded-lg bg-[var(--ns-surface-hover)] p-1 text-sm">
             {abasVisiveis.map((valor) => (
               <button
@@ -992,7 +997,7 @@ export function AtendimentoWorkspaceReal({
           )}
 
           {/* Pergunta 2: o que falta fazer? Não existe pra "IA" — lá ninguém da equipe "lê" ou "responde". */}
-          {aba !== "ia" && (
+          {!busca.trim() && aba !== "ia" && (
             <div className="flex gap-1 rounded-lg bg-[var(--ns-surface-hover)] p-1 text-xs">
               {SUB_FILTROS.map((filtro) => (
                 <button

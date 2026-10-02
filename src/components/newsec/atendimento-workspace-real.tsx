@@ -53,7 +53,7 @@ type ConversaLista = {
   contact: { id: string; display_name: string | null; contact_phone_numbers: TelefoneContato[] } | null;
   channel: { id: string; name: string; provider: string } | null;
   team: { id: string; name: string } | null;
-  assigned_user_profile: { id: string; full_name: string | null } | null;
+  assigned_user_profile: { id: string; full_name: string | null; business_area?: string | null } | null;
   // Só a última mensagem (sem nota interna) — diz se quem falou por último foi o cliente.
   ultima_mensagem: { direction: "entrada" | "saida" }[] | null;
 };
@@ -63,7 +63,56 @@ function aguardandoResposta(conversa: ConversaLista): boolean {
   return conversa.status !== "encerrada" && conversa.unread_count === 0 && conversa.ultima_mensagem?.[0]?.direction === "entrada";
 }
 
-type UsuarioEmpresa = { id: string; full_name: string | null };
+type UsuarioEmpresa = { id: string; full_name: string | null; business_area?: string | null };
+
+const ROTULO_SETOR: Record<string, string> = { commercial: "Comercial", legal: "Jurídico" };
+
+/** Setor da conversa = setor do responsável (pedido do Gabriel, 02/10/2026: transferir pro jurídico muda o setor). */
+function setorDaConversa(conversa: { assigned_user_profile: { business_area?: string | null } | null }): string | null {
+  const area = conversa.assigned_user_profile?.business_area;
+  return area ? (ROTULO_SETOR[area] ?? null) : null;
+}
+
+/** Lista de transferência separada por setor — quem é do jurídico, quem é do comercial. */
+function ListaTransferencia({
+  usuarios,
+  responsavelAtual,
+  onEscolher,
+  grande,
+}: {
+  usuarios: UsuarioEmpresa[];
+  responsavelAtual: string | null;
+  onEscolher: (u: UsuarioEmpresa) => void;
+  grande?: boolean;
+}) {
+  const grupos: [string, UsuarioEmpresa[]][] = [
+    ["Comercial", usuarios.filter((u) => u.business_area !== "legal")],
+    ["Jurídico", usuarios.filter((u) => u.business_area === "legal")],
+  ];
+  return (
+    <>
+      {grupos.map(([titulo, lista]) =>
+        lista.filter((u) => u.id !== responsavelAtual).length === 0 ? null : (
+          <div key={titulo}>
+            <p className="px-2.5 pb-0.5 pt-2 text-[10px] font-semibold uppercase tracking-wide text-[var(--ns-text-secondary)]">{titulo}</p>
+            {lista
+              .filter((u) => u.id !== responsavelAtual)
+              .map((u) => (
+                <button
+                  key={u.id}
+                  type="button"
+                  onClick={() => onEscolher(u)}
+                  className={`block w-full rounded-md px-2.5 text-left text-[var(--ns-text)] hover:bg-[var(--ns-surface-hover)] ${grande ? "py-2 text-sm" : "py-1.5 text-xs"}`}
+                >
+                  {u.full_name ?? u.id}
+                </button>
+              ))}
+          </div>
+        ),
+      )}
+    </>
+  );
+}
 
 type MensagemComAutor = Message & { author: { id: string; full_name: string | null } | null };
 
@@ -197,6 +246,9 @@ export function AtendimentoWorkspaceReal({
   // A aba "IA" (conversas sem responsável, só a IA atendendo) é visível pra quem supervisiona —
   // mesmo corte de "isAdminOuManager" usado no resto da tela pra "ver toda a empresa".
   const podeVerIA = isAdminOuManager || isPlatformOwner;
+  // Transferir conversa (e com isso mudar o setor): só gerente/administrador/master. O banco também
+  // barra consultor (política conversations_update só aceita o próprio usuário como responsável).
+  const podeTransferir = isAdminOuManager || isPlatformOwner;
   // Consultor vê só "Meus" (pedido do Gabriel): "Outros" e "IA" são de quem supervisiona.
   const abasVisiveis: Aba[] = podeVerIA ? ["meus", "outros", "ia"] : ["meus"];
   const [aba, setAba] = useState<Aba>("meus");
@@ -275,7 +327,7 @@ export function AtendimentoWorkspaceReal({
   const SELECT_CONVERSAS =
     "id, status, created_at, last_activity_at, last_message_preview, unread_count, assigned_user_profile_id, client_id, team_id, external_id, " +
     "contact:contacts(id, display_name, contact_phone_numbers(phone_e164, is_primary)), channel:channels(id, name, provider), team:teams(id, name), " +
-    "assigned_user_profile:user_profiles!conversations_assigned_user_profile_id_fkey(id, full_name), " +
+    "assigned_user_profile:user_profiles!conversations_assigned_user_profile_id_fkey(id, full_name, business_area), " +
     "ultima_mensagem:messages(direction)";
 
   /**
@@ -700,7 +752,7 @@ export function AtendimentoWorkspaceReal({
   useEffect(() => {
     supabase
       .from("user_profiles")
-      .select("id, full_name")
+      .select("id, full_name, business_area")
       .eq("company_id", companyId)
       .eq("is_active", true)
       .then(({ data }) => setUsuariosEmpresa((data ?? []) as UsuarioEmpresa[]));
@@ -858,7 +910,8 @@ export function AtendimentoWorkspaceReal({
   async function handleTransferir(usuario: UsuarioEmpresa) {
     if (!selecionadaId) return;
     setTransferenciaAberta(false);
-    if (!window.confirm(`Transferir esta conversa para ${usuario.full_name ?? "este usuário"}?`)) return;
+    const setorDestino = usuario.business_area ? ROTULO_SETOR[usuario.business_area] : null;
+    if (!window.confirm(`Transferir esta conversa para ${usuario.full_name ?? "este usuário"}${setorDestino ? ` (${setorDestino})` : ""}?`)) return;
     const resultado = await transferirConversaAction(selecionadaId, usuario.id, null);
     mostrarAviso(resultado.message);
     await atualizarListaEContagens();
@@ -1044,6 +1097,7 @@ export function AtendimentoWorkspaceReal({
                     {" · "}
                     {conversaSelecionada.channel?.name ?? "Canal"} ·{" "}
                     {nomeResponsavel(conversaSelecionada, "sem responsável")}
+                    {setorDaConversa(conversaSelecionada) ? ` · ${setorDaConversa(conversaSelecionada)}` : ""}
                   </p>
                 </div>
               </div>
@@ -1071,6 +1125,7 @@ export function AtendimentoWorkspaceReal({
                     <span className="hidden @4xl:inline">Assumir</span>
                   </button>
                 )}
+                {podeTransferir && (
                 <div className="relative hidden @md:block" ref={transferenciaRef}>
                   <button
                     type="button"
@@ -1083,21 +1138,15 @@ export function AtendimentoWorkspaceReal({
                   </button>
                   {transferenciaAberta && (
                     <div className="absolute right-0 z-30 mt-1 max-h-[60vh] w-56 overflow-y-auto rounded-lg border border-[var(--ns-border)] bg-[var(--ns-surface)] p-1.5 shadow-lg">
-                      {usuariosEmpresa
-                        .filter((u) => u.id !== conversaSelecionada.assigned_user_profile_id)
-                        .map((u) => (
-                          <button
-                            key={u.id}
-                            type="button"
-                            onClick={() => handleTransferir(u)}
-                            className="block w-full rounded-md px-2.5 py-1.5 text-left text-xs text-[var(--ns-text)] hover:bg-[var(--ns-surface-hover)]"
-                          >
-                            {u.full_name ?? u.id}
-                          </button>
-                        ))}
+                      <ListaTransferencia
+                        usuarios={usuariosEmpresa}
+                        responsavelAtual={conversaSelecionada.assigned_user_profile_id}
+                        onEscolher={(u) => void handleTransferir(u)}
+                      />
                     </div>
                   )}
                 </div>
+                )}
                 <button
                   type="button"
                   onClick={handleConcluirOuReabrir}
@@ -1140,24 +1189,22 @@ export function AtendimentoWorkspaceReal({
                             <UserPlus aria-hidden="true" className="h-4 w-4" /> Assumir conversa
                           </button>
                         )}
-                        <p className="flex items-center gap-2 px-2.5 pb-1 pt-2.5 text-[11px] font-semibold uppercase tracking-wide text-[var(--ns-text-secondary)]">
-                          <Users2 aria-hidden="true" className="h-3.5 w-3.5" /> Transferir para
-                        </p>
-                        {usuariosEmpresa
-                          .filter((u) => u.id !== conversaSelecionada.assigned_user_profile_id)
-                          .map((u) => (
-                            <button
-                              key={u.id}
-                              type="button"
-                              onClick={() => {
+                        {podeTransferir && (
+                          <>
+                            <p className="flex items-center gap-2 px-2.5 pb-1 pt-2.5 text-[11px] font-semibold uppercase tracking-wide text-[var(--ns-text-secondary)]">
+                              <Users2 aria-hidden="true" className="h-3.5 w-3.5" /> Transferir para
+                            </p>
+                            <ListaTransferencia
+                              grande
+                              usuarios={usuariosEmpresa}
+                              responsavelAtual={conversaSelecionada.assigned_user_profile_id}
+                              onEscolher={(u) => {
                                 setMenuMaisAberto(false);
                                 void handleTransferir(u);
                               }}
-                              className="block w-full rounded-lg px-2.5 py-2 text-left text-[var(--ns-text)] hover:bg-[var(--ns-surface-hover)]"
-                            >
-                              {u.full_name ?? u.id}
-                            </button>
-                          ))}
+                            />
+                          </>
+                        )}
                       </div>
                     </>
                   )}
@@ -1505,6 +1552,7 @@ export function AtendimentoWorkspaceReal({
                 <LinhaFicha rotulo="Status" valor={<EstadoBadge estado={STATUS_PARA_BADGE[conversaSelecionada.status]} />} />
                 <LinhaFicha rotulo="Equipe" valor={conversaSelecionada.team?.name ?? "Sem equipe"} />
                 <LinhaFicha rotulo="Responsável" valor={nomeResponsavel(conversaSelecionada, "Sem responsável")} />
+                <LinhaFicha rotulo="Setor" valor={setorDaConversa(conversaSelecionada) ?? "—"} />
                 <LinhaFicha rotulo="Canal" valor={conversaSelecionada.channel?.name ?? "—"} />
                 {/* Conversa do Totalk: created_at é o dia da IMPORTAÇÃO, não do atendimento — não mostrar como início. */}
                 {!conversaSelecionada.external_id && (

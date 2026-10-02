@@ -320,8 +320,9 @@ async function processarJob(admin: Admin, job: Job) {
     .eq("id", job.message_id)
     .single();
   const autor = (mensagem as unknown as { author: { full_name: string | null } | null })?.author;
-  // Campo "Nome" do cadastro (o apelido de alguns usuários é igual ao login, ex.: "gabriel.schandler").
-  const nome = autor?.full_name?.trim() || null;
+  // Primeiro nome do campo "Nome" do cadastro, como era no Totalk ("*Mariza:*"). O apelido não serve:
+  // em alguns cadastros ele é igual ao login (ex.: "gabriel.schandler").
+  const nome = autor?.full_name?.trim().split(/\s+/)[0] || null;
   // Mesmo formato que o cliente já via no Totalk e que o NewSec Chat usa: nome em negrito em cima.
   const texto = nome ? `*${nome}:*\n${mensagem?.body ?? ""}` : (mensagem?.body ?? "");
 

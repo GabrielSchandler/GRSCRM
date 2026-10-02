@@ -219,7 +219,11 @@ export async function transferirConversaAction(
   paraUserProfileId: string,
   nota: string | null,
 ): Promise<AtendimentoActionState> {
-  const { supabase, userProfileId, companyId } = await getCurrentUserContext();
+  const { supabase, userProfileId, companyId, role, isPlatformOwner } = await getCurrentUserContext();
+  // Só gerente/administrador/master transfere (pedido do Gabriel, 02/10/2026).
+  if (!(role === "admin" || role === "manager" || isPlatformOwner)) {
+    return { ok: false, message: "Só gerente transfere conversa." };
+  }
 
   const { data: conversaAtual } = await supabase
     .from("conversations")
@@ -247,7 +251,24 @@ export async function transferirConversaAction(
     note: nota,
   });
 
-  return { ok: true, message: "Conversa transferida." };
+  // Registro na própria conversa (nota interna — não vai pro cliente): pra quem recebe saber de onde veio.
+  const { data: perfis } = await supabase.from("user_profiles").select("id, full_name, business_area").in("id", [paraUserProfileId, userProfileId]);
+  const destino = perfis?.find((p) => p.id === paraUserProfileId);
+  const quem = perfis?.find((p) => p.id === userProfileId);
+  const setor = destino?.business_area === "legal" ? "Jurídico" : destino?.business_area === "commercial" ? "Comercial" : null;
+  await supabase.from("messages").insert({
+    company_id: companyId,
+    conversation_id: conversationId,
+    direction: "saida",
+    author_type: "sistema",
+    author_user_profile_id: userProfileId,
+    is_internal_note: true,
+    message_type: "nota",
+    body: `Conversa transferida para ${destino?.full_name ?? "outro atendente"}${setor ? ` (${setor})` : ""} por ${quem?.full_name ?? "gerente"}.${nota ? ` ${nota}` : ""}`,
+    status: "criada",
+  });
+
+  return { ok: true, message: setor ? `Conversa transferida para o ${setor}.` : "Conversa transferida." };
 }
 
 export async function concluirConversaAction(conversationId: string): Promise<AtendimentoActionState> {

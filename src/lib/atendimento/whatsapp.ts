@@ -316,11 +316,12 @@ async function processarJob(admin: Admin, job: Job) {
 
   const { data: mensagem } = await admin
     .from("messages")
-    .select("body, author:user_profiles!messages_author_user_profile_id_fkey(full_name, nickname)")
+    .select("body, author:user_profiles!messages_author_user_profile_id_fkey(full_name)")
     .eq("id", job.message_id)
     .single();
-  const autor = (mensagem as unknown as { author: { full_name: string | null; nickname: string | null } | null })?.author;
-  const nome = autor?.nickname || autor?.full_name?.split(" ")[0] || null;
+  const autor = (mensagem as unknown as { author: { full_name: string | null } | null })?.author;
+  // Campo "Nome" do cadastro (o apelido de alguns usuários é igual ao login, ex.: "gabriel.schandler").
+  const nome = autor?.full_name?.trim() || null;
   // Mesmo formato que o cliente já via no Totalk e que o NewSec Chat usa: nome em negrito em cima.
   const texto = nome ? `*${nome}:*\n${mensagem?.body ?? ""}` : (mensagem?.body ?? "");
 

@@ -325,7 +325,7 @@ export async function transferirConversaAction(
 
   const { data: conversaAtual } = await supabase
     .from("conversations")
-    .select("assigned_user_profile_id, unread_count")
+    .select("assigned_user_profile_id, unread_count, status")
     .eq("id", conversationId)
     .maybeSingle();
 
@@ -336,6 +336,9 @@ export async function transferirConversaAction(
     .from("conversations")
     .update({
       assigned_user_profile_id: paraUserProfileId,
+      // Saiu da IA (ou da fila): agora é atendimento de uma pessoa — some da aba "IA", a IA para de vez
+      // (ligada ou desligada) e a conversa vai pra "Meus" de quem recebeu / "Outros" dos gerentes.
+      ...(conversaAtual?.status === "ia" || conversaAtual?.status === "aguardando_humano" ? { status: "humano" } : {}),
       ...(paraOutraPessoa ? { last_activity_at: new Date().toISOString(), unread_count: Math.max(conversaAtual?.unread_count ?? 0, 1) } : {}),
     })
     .eq("id", conversationId)

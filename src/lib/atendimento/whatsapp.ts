@@ -1,6 +1,6 @@
 import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { baixarMidia, enviarTexto, ErroEvolution, lerTexto } from "./evolution";
+import { baixarMidia, enviarAudio, enviarMidia, enviarTexto, ErroEvolution, lerTexto } from "./evolution";
 
 /**
  * WhatsApp real no atendimento do CRM (Evolution API, mesma instalação do NewSec Chat).
@@ -245,8 +245,15 @@ export async function processarEventoEvolution(carga: unknown): Promise<string> 
   if (!canal) return `ignorado: instância ${instancia} não é de nenhum canal`;
 
   // Já existe (aviso repetido, ou eco de mensagem enviada pelo próprio CRM).
-  const { data: repetida } = await admin.from("messages").select("id").eq("company_id", canal.company_id).eq("external_id", idWhatsapp).maybeSingle();
-  if (repetida) return "repetida";
+  const jaGravada = async () =>
+    (await admin.from("messages").select("id").eq("company_id", canal.company_id).eq("external_id", idWhatsapp).maybeSingle()).data;
+  if (await jaGravada()) return "repetida";
+  // Eco do que o CRM enviou pode chegar ANTES de o envio terminar de gravar o id do WhatsApp (com foto e
+  // áudio isso é comum). Espera um pouco e confere de novo, pra não aparecer a mesma mensagem duas vezes.
+  if (doProprioNumero) {
+    await new Promise((fim) => setTimeout(fim, 3000));
+    if (await jaGravada()) return "repetida";
+  }
 
   const nomeContato = !doProprioNumero && typeof dados.pushName === "string" ? dados.pushName : null;
   const contatoId = await acharOuCriarContato(admin, canal.company_id, telefone, nomeContato);
@@ -316,10 +323,11 @@ async function processarJob(admin: Admin, job: Job) {
 
   const { data: mensagem } = await admin
     .from("messages")
-    .select("body, author:user_profiles!messages_author_user_profile_id_fkey(full_name)")
+    .select("body, message_type, author:user_profiles!messages_author_user_profile_id_fkey(full_name)")
     .eq("id", job.message_id)
     .single();
   const autor = (mensagem as unknown as { author: { full_name: string | null } | null })?.author;
+  const tipo = (mensagem as { message_type?: string } | null)?.message_type ?? "texto";
   // Primeiro nome do campo "Nome" do cadastro, como era no Totalk ("*Mariza:*"). O apelido não serve:
   // em alguns cadastros ele é igual ao login (ex.: "gabriel.schandler").
   const nome = autor?.full_name?.trim().split(/\s+/)[0] || null;
@@ -327,7 +335,37 @@ async function processarJob(admin: Admin, job: Job) {
   const texto = nome ? `*${nome}:*\n${mensagem?.body ?? ""}` : (mensagem?.body ?? "");
 
   try {
-    const idWhatsapp = await enviarTexto(canal.provider_channel_external_id, telefone, texto);
+    const instancia = canal.provider_channel_external_id;
+    let idWhatsapp: string | null;
+    if (tipo === "texto") {
+      idWhatsapp = await enviarTexto(instancia, telefone, texto);
+    } else {
+      // Áudio/foto/vídeo/documento enviados pelo CRM: o arquivo já está no Storage (subiu direto do navegador).
+      const { data: anexo } = await admin
+        .from("message_attachments")
+        .select("storage_path, content_type, file_name")
+        .eq("message_id", job.message_id)
+        .order("created_at")
+        .limit(1)
+        .maybeSingle();
+      // Sem anexo ainda (a action grava logo depois de criar a mensagem): passageiro, tenta de novo.
+      if (!anexo) throw new Error("Arquivo da mensagem ainda não registrado.");
+      const { data: link, error: erroLink } = await admin.storage.from(BUCKET).createSignedUrl(anexo.storage_path, 15 * 60);
+      if (erroLink || !link) throw new Error(`Não foi possível ler o arquivo: ${erroLink?.message ?? "sem link"}`);
+      if (tipo === "audio") {
+        // Mensagem de voz não tem legenda: vai sem o nome (a voz já identifica quem fala).
+        idWhatsapp = await enviarAudio(instancia, telefone, link.signedUrl);
+      } else {
+        const legenda = (mensagem?.body ?? "").trim();
+        idWhatsapp = await enviarMidia(instancia, telefone, {
+          tipo: tipo === "imagem" ? "image" : tipo === "video" ? "video" : "document",
+          url: link.signedUrl,
+          mimetype: anexo.content_type ?? "application/octet-stream",
+          nomeArquivo: anexo.file_name ?? "arquivo",
+          legenda: nome ? `*${nome}:*${legenda ? `\n${legenda}` : ""}` : legenda,
+        });
+      }
+    }
     await admin.from("messages").update({ status: "enviada", external_id: idWhatsapp, sent_at: new Date().toISOString(), failed_reason: null }).eq("id", job.message_id);
     await admin.from("outbound_jobs").update({ status: "enviado", last_error: null, updated_at: new Date().toISOString() }).eq("id", job.id);
   } catch (erro) {

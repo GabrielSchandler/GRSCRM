@@ -109,6 +109,89 @@ export async function enviarMensagemAction(
   return { ok: true, message: resultado?.ja_existia ? "Mensagem já enviada." : "Mensagem enviada." };
 }
 
+const TAMANHO_MAXIMO_ANEXO = 16 * 1024 * 1024; // limite do WhatsApp pra áudio/vídeo/foto
+
+function nomeArquivoSeguro(nome: string) {
+  return nome.normalize("NFKD").replace(/[^\w.-]+/g, "_").slice(-100) || "arquivo";
+}
+
+/**
+ * Libera o envio de UM arquivo do navegador direto pro Storage (link de upload assinado, uso único) —
+ * arquivo não passa pela função do servidor (limite de ~4,5 MB da Vercel). A conversa é lida com a sessão
+ * do usuário: se a RLS não deixa ele ver a conversa, não libera nada.
+ */
+export async function prepararEnvioAnexoAction(
+  conversationId: string,
+  nomeArquivo: string,
+  tamanho: number,
+): Promise<AtendimentoActionState & { caminho?: string; token?: string }> {
+  if (tamanho > TAMANHO_MAXIMO_ANEXO) return { ok: false, message: "Arquivo maior que 16 MB (limite do WhatsApp)." };
+  const { supabase } = await getCurrentUserContext();
+  const { data: conversa } = await supabase.from("conversations").select("id, company_id").eq("id", conversationId).maybeSingle();
+  if (!conversa) return { ok: false, message: "Conversa não encontrada." };
+  if (await canalSemWhatsApp(supabase, conversationId)) return { ok: false, message: AVISO_SEM_WHATSAPP };
+
+  const caminho = `${conversa.company_id}/${conversa.id}/envio/${crypto.randomUUID()}-${nomeArquivoSeguro(nomeArquivo)}`;
+  const { data, error } = await createAdminClient().storage.from("atendimento-anexos").createSignedUploadUrl(caminho);
+  if (error || !data) return { ok: false, message: `Não foi possível preparar o envio: ${error?.message ?? "erro"}.` };
+  return { ok: true, message: "", caminho: data.path, token: data.token };
+}
+
+function tipoMensagemDoArquivo(mime: string) {
+  if (mime.startsWith("audio/")) return "audio";
+  if (mime.startsWith("image/")) return "imagem";
+  if (mime.startsWith("video/")) return "video";
+  return "documento";
+}
+
+/**
+ * Envia ao cliente um arquivo que o navegador já subiu (prepararEnvioAnexoAction): áudio gravado, foto,
+ * vídeo ou documento. Mesma garantia do texto — mensagem + job numa transação (enviar_mensagem_com_job),
+ * idempotente pela chave. O anexo é registrado antes do envio imediato.
+ */
+export async function enviarAnexoAction(
+  conversationId: string,
+  arquivo: { caminho: string; nome: string; tipo: string; tamanho: number },
+  idempotencyKey: string,
+  legenda?: string,
+  respostaA?: string | null,
+): Promise<AtendimentoActionState> {
+  const { supabase, userProfileId, companyId } = await getCurrentUserContext();
+  // Só aceita caminho que o próprio prepararEnvioAnexoAction gera pra ESTA conversa.
+  if (!arquivo.caminho.startsWith(`${companyId}/${conversationId}/envio/`) || arquivo.caminho.includes("..")) {
+    return { ok: false, message: "Arquivo inválido." };
+  }
+  if (await canalSemWhatsApp(supabase, conversationId)) return { ok: false, message: AVISO_SEM_WHATSAPP };
+
+  const tipoMensagem = tipoMensagemDoArquivo(arquivo.tipo);
+  const { data, error } = await supabase.rpc("enviar_mensagem_com_job", {
+    p_conversation_id: conversationId,
+    p_company_id: companyId,
+    p_author_user_profile_id: userProfileId,
+    p_body: (legenda ?? "").trim(),
+    p_message_type: tipoMensagem,
+    p_idempotency_key: idempotencyKey,
+  });
+  if (error) return { ok: false, message: `Não foi possível enviar: ${error.message}.` };
+
+  const resultado = data?.[0];
+  if (resultado?.message_id && !resultado.ja_existia) {
+    const { error: erroAnexo } = await createAdminClient().from("message_attachments").insert({
+      message_id: resultado.message_id,
+      company_id: companyId,
+      storage_path: arquivo.caminho,
+      content_type: arquivo.tipo || "application/octet-stream",
+      file_name: nomeArquivoSeguro(arquivo.nome),
+      size_bytes: arquivo.tamanho,
+    });
+    if (erroAnexo) return { ok: false, message: `Não foi possível registrar o arquivo: ${erroAnexo.message}.` };
+    if (respostaA) await supabase.rpc("definir_resposta_mensagem", { p_message_id: resultado.message_id, p_reply_to: respostaA });
+    await despacharMensagem(resultado.message_id).catch((erro) => console.error("[whatsapp] envio imediato:", erro));
+  }
+  const rotulo = { audio: "Áudio enviado", imagem: "Foto enviada", video: "Vídeo enviado", documento: "Arquivo enviado" }[tipoMensagem];
+  return { ok: true, message: resultado?.ja_existia ? "Já tinha sido enviado." : `${rotulo}.` };
+}
+
 /**
  * Dono da conversa abriu: zera as não lidas. O filtro por responsável fica na própria query — se
  * quem chamou não é o dono, não atualiza nada (a regra vale mesmo chamando a action direto).
@@ -227,13 +310,19 @@ export async function transferirConversaAction(
 
   const { data: conversaAtual } = await supabase
     .from("conversations")
-    .select("assigned_user_profile_id")
+    .select("assigned_user_profile_id, unread_count")
     .eq("id", conversationId)
     .maybeSingle();
 
+  // Quem recebe precisa perceber (pedido do Gabriel, 02/10/2026): a conversa sobe pro topo (atividade
+  // agora) e fica não lida — isso faz o avisador dele tocar e a lista mostrar "Contato novo".
+  const paraOutraPessoa = paraUserProfileId !== userProfileId;
   const { data, error } = await supabase
     .from("conversations")
-    .update({ assigned_user_profile_id: paraUserProfileId })
+    .update({
+      assigned_user_profile_id: paraUserProfileId,
+      ...(paraOutraPessoa ? { last_activity_at: new Date().toISOString(), unread_count: Math.max(conversaAtual?.unread_count ?? 0, 1) } : {}),
+    })
     .eq("id", conversationId)
     .select("id");
 

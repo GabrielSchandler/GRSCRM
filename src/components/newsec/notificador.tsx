@@ -75,7 +75,7 @@ export function Notificador({
   }
   const router = useRouter();
   const estado = useSyncExternalStore(assinarNotificacoes, lerNotificacoes, lerNotificacoesNoServidor);
-  const anteriorRef = useRef<{ whatsapp: Map<string, number>; interno: Map<string, number> } | null>(null);
+  const anteriorRef = useRef<{ whatsapp: Map<string, number>; interno: Map<string, number>; em: number } | null>(null);
 
   // O navegador só deixa tocar som depois de um clique/tecla na página: prepara o áudio no 1º gesto.
   useEffect(() => {
@@ -112,6 +112,7 @@ export function Notificador({
       const atual = {
         whatsapp: new Map(listaWhatsapp.map((c) => [c.id, c.unread_count])),
         interno: new Map(listaInterno.map((t) => [t.thread_id, t.nao_lidas])),
+        em: Date.now(),
       };
       atualizarNotificacoes({
         naoLidasAtendimento: whatsapp.error ? lerNotificacoes().naoLidasAtendimento : (whatsapp.count ?? listaWhatsapp.length),
@@ -123,17 +124,36 @@ export function Notificador({
       if (!anterior) return; // 1ª leitura só marca o ponto de partida — não avisa o que já estava lá
 
       const novos: AvisoNotificacao[] = [];
-      for (const c of listaWhatsapp) {
-        if (c.unread_count > (anterior.whatsapp.get(c.id) ?? 0)) {
-          novos.push({
-            id: `c:${c.id}:${Date.now()}`,
-            tipo: "whatsapp",
-            titulo: c.contact?.display_name ?? "Cliente",
-            texto: previa(c.last_message_preview),
-            href: `/atendimento?c=${c.id}`,
-            em: Date.now(),
-          });
+      const subiram = listaWhatsapp.filter((c) => c.unread_count > (anterior.whatsapp.get(c.id) ?? 0));
+      // Conversa que acabou de ser transferida pra mim vira aviso de "Contato novo" (pedido do Gabriel, 02/10/2026).
+      const transferidasAgora = new Map<string, string | null>();
+      const recemChegadas = subiram.filter((c) => !anterior.whatsapp.has(c.id));
+      if (recemChegadas.length > 0) {
+        const { data: transferencias } = await supabase
+          .from("conversation_transfers")
+          .select("conversation_id, by:user_profiles!conversation_transfers_transferred_by_fkey(full_name)")
+          .in(
+            "conversation_id",
+            recemChegadas.map((c) => c.id),
+          )
+          .eq("to_user_profile_id", userProfileId)
+          .gte("created_at", new Date(anterior.em - 60_000).toISOString());
+        for (const t of (transferencias ?? []) as unknown as { conversation_id: string; by: { full_name: string | null } | null }[]) {
+          transferidasAgora.set(t.conversation_id, t.by?.full_name?.trim().split(/\s+/)[0] ?? null);
         }
+        if (cancelado) return;
+      }
+      for (const c of subiram) {
+        const transferida = transferidasAgora.has(c.id);
+        const quem = transferidasAgora.get(c.id);
+        novos.push({
+          id: `c:${c.id}:${Date.now()}`,
+          tipo: "whatsapp",
+          titulo: transferida ? `Contato novo · ${c.contact?.display_name ?? "Cliente"}` : (c.contact?.display_name ?? "Cliente"),
+          texto: transferida ? `Transferido para você${quem ? ` por ${quem}` : ""}` : previa(c.last_message_preview),
+          href: `/atendimento?c=${c.id}`,
+          em: Date.now(),
+        });
       }
       for (const t of listaInterno) {
         if (t.nao_lidas > (anterior.interno.get(t.thread_id) ?? 0)) {

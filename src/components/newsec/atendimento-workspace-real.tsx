@@ -1,7 +1,7 @@
 "use client";
 
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { AlertTriangle, ArrowLeft, Bot, FileText, Info, MoreVertical, RefreshCw, Search, Send, StickyNote, UserPlus, Users2, X } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Bot, FileText, Info, Mic, MoreVertical, Paperclip, RefreshCw, Search, Send, Square, StickyNote, Trash2, UserPlus, Users2, X } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/browser";
 import { definirFoco } from "@/lib/newsec/notificacoes";
@@ -16,10 +16,12 @@ import {
   criarNotaInternaAction,
   despacharPendentesAction,
   editarMensagemAction,
+  enviarAnexoAction,
   enviarMensagemAction,
   marcarConversaComoLidaAction,
   reabrirConversaAction,
   obterLinksAnexosAction,
+  prepararEnvioAnexoAction,
   reenviarMensagemFalhadaAction,
   transferirConversaAction,
   type AnexoParaExibir,
@@ -288,6 +290,13 @@ export function AtendimentoWorkspaceReal({
   const [rascunhos, setRascunhos] = useState<Record<string, string>>({});
   const [modoNota, setModoNota] = useState(false);
   const [enviando, setEnviando] = useState(false);
+  const [contatosNovos, setContatosNovos] = useState<Set<string>>(new Set());
+  // Áudio gravado no navegador e arquivos (foto/vídeo/documento) pro cliente.
+  const [gravandoDesde, setGravandoDesde] = useState<number | null>(null);
+  const [relogioGravacao, setRelogioGravacao] = useState(0);
+  const [statusEnvio, setStatusEnvio] = useState<string | null>(null);
+  const gravadorRef = useRef<{ gravador: MediaRecorder; cancelar: boolean } | null>(null);
+  const entradaArquivoRef = useRef<HTMLInputElement | null>(null);
   const [aviso, setAviso] = useState<string | null>(null);
   const [usuariosEmpresa, setUsuariosEmpresa] = useState<UsuarioEmpresa[]>([]);
   const [transferenciaAberta, setTransferenciaAberta] = useState(false);
@@ -355,6 +364,51 @@ export function AtendimentoWorkspaceReal({
     return escopado;
   }
 
+  /**
+   * "Contato novo" = conversa transferida pro responsável atual que ele ainda não abriu (continua não
+   * lida) nem respondeu depois da transferência. Calculado da tabela de transferências — sem coluna nova.
+   */
+  const detectarContatosNovos = useCallback(
+    async (lista: ConversaLista[]) => {
+      const candidatas = lista.filter((c) => c.unread_count > 0 && c.assigned_user_profile_id && c.status !== "encerrada");
+      if (candidatas.length === 0) return setContatosNovos(new Set());
+      const { data: transferencias } = await supabase
+        .from("conversation_transfers")
+        .select("conversation_id, to_user_profile_id, created_at")
+        .in(
+          "conversation_id",
+          candidatas.map((c) => c.id),
+        )
+        .order("created_at", { ascending: false })
+        .limit(500);
+      const ultima = new Map<string, { to_user_profile_id: string | null; created_at: string }>();
+      for (const t of transferencias ?? []) if (!ultima.has(t.conversation_id)) ultima.set(t.conversation_id, t);
+      const transferidas = candidatas.filter((c) => ultima.get(c.id)?.to_user_profile_id === c.assigned_user_profile_id);
+      if (transferidas.length === 0) return setContatosNovos(new Set());
+
+      const desde = transferidas.map((c) => ultima.get(c.id)!.created_at).sort()[0];
+      const { data: respostas } = await supabase
+        .from("messages")
+        .select("conversation_id, author_user_profile_id, created_at")
+        .in(
+          "conversation_id",
+          transferidas.map((c) => c.id),
+        )
+        .eq("direction", "saida")
+        .eq("author_type", "humano")
+        .gte("created_at", desde)
+        .limit(1000);
+      const novos = transferidas.filter(
+        (c) =>
+          !(respostas ?? []).some(
+            (m) => m.conversation_id === c.id && m.author_user_profile_id === c.assigned_user_profile_id && m.created_at > ultima.get(c.id)!.created_at,
+          ),
+      );
+      setContatosNovos(new Set(novos.map((c) => c.id)));
+    },
+    [supabase],
+  );
+
   const carregarConversas = useCallback(async ({ silencioso = false }: { silencioso?: boolean } = {}) => {
     const pedido = ++pedidoListaRef.current;
     if (!silencioso) setCarregandoLista(true);
@@ -419,12 +473,13 @@ export function AtendimentoWorkspaceReal({
       }
     } else {
       setConversas((data ?? []) as unknown as ConversaLista[]);
+      void detectarContatosNovos((data ?? []) as unknown as ConversaLista[]);
       setTemMaisConversas((data?.length ?? 0) === limite);
       setAtualizadoEm(new Date());
     }
     setCarregandoLista(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [supabase, aba, subFiltro, limiteLista, userProfileId, companyId, buscaAplicada]);
+  }, [supabase, aba, subFiltro, limiteLista, userProfileId, companyId, buscaAplicada, detectarContatosNovos]);
 
   /** Contagem total de cada aba (independente da aba selecionada), pro numerinho ao lado do rótulo. */
   const carregarContagensAbas = useCallback(async () => {
@@ -811,6 +866,12 @@ export function AtendimentoWorkspaceReal({
   const semWhatsApp = conversaSelecionada ? conversaSelecionada.channel?.provider !== "evolution" : false;
   const emModoNota = modoNota || semWhatsApp;
 
+  useEffect(() => {
+    if (gravandoDesde === null) return;
+    const id = window.setInterval(() => setRelogioGravacao(Date.now()), 500);
+    return () => window.clearInterval(id);
+  }, [gravandoDesde]);
+
   // Dono com a conversa aberta: mensagem nova que a atualização automática trouxe já conta como vista.
   useEffect(() => {
     const c = conversaDaLista;
@@ -828,9 +889,12 @@ export function AtendimentoWorkspaceReal({
     aguardando_resposta: subFiltro === "aguardando_resposta" && conversas ? conversas.filter(aguardandoResposta).length : null,
   };
 
+  const ehContatoNovo = useCallback((c: ConversaLista) => c.unread_count > 0 && contatosNovos.has(c.id), [contatosNovos]);
+
   const conversasFiltradas = useMemo(() => {
     if (!conversas) return [];
-    let lista = conversas;
+    // Conversa recém-transferida fica no topo até o responsável abrir (pedido do Gabriel, 02/10/2026).
+    let lista = contatosNovos.size === 0 ? conversas : [...conversas.filter(ehContatoNovo), ...conversas.filter((c) => !ehContatoNovo(c))];
 
     if (aba !== "ia") {
       if (subFiltro === "nao_lidas") lista = lista.filter((c) => c.unread_count > 0);
@@ -845,7 +909,7 @@ export function AtendimentoWorkspaceReal({
       const telefoneBate = digitosBusca.length >= 3 && (telefoneDoContato(c.contact) ?? "").includes(digitosBusca);
       return nomeBate || telefoneBate;
     });
-  }, [conversas, busca, subFiltro, aba]);
+  }, [conversas, busca, subFiltro, aba, contatosNovos.size, ehContatoNovo]);
 
   async function handleEditarMensagem(messageId: string, texto: string) {
     if (!selecionadaId) return;
@@ -895,6 +959,102 @@ export function AtendimentoWorkspaceReal({
       // Tudo ao mesmo tempo (antes: uma consulta esperando a outra, ~3x mais lento).
       await Promise.all([carregarNovidadesDaConversa(selecionadaId), carregarConversas({ silencioso: true }), carregarContagensAbas()]);
     }
+  }
+
+  /** Sobe o arquivo direto do navegador pro Storage e manda pro cliente pelo WhatsApp. */
+  async function enviarArquivo(conversationId: string, arquivo: File, legenda = "") {
+    setEnviando(true);
+    setStatusEnvio(arquivo.type.startsWith("audio/") ? "Enviando áudio..." : `Enviando "${arquivo.name}"...`);
+    try {
+      const preparo = await prepararEnvioAnexoAction(conversationId, arquivo.name, arquivo.size);
+      if (!preparo.ok || !preparo.caminho || !preparo.token) throw new Error(preparo.message);
+      const tipo = arquivo.type || "application/octet-stream";
+      const { error } = await supabase.storage
+        .from("atendimento-anexos")
+        .uploadToSignedUrl(preparo.caminho, preparo.token, arquivo, { contentType: tipo });
+      if (error) throw new Error(error.message);
+      const resultado = await enviarAnexoAction(
+        conversationId,
+        { caminho: preparo.caminho, nome: arquivo.name, tipo, tamanho: arquivo.size },
+        crypto.randomUUID(),
+        legenda,
+        respondendo?.id ?? null,
+      );
+      mostrarAviso(resultado.message);
+      if (!resultado.ok) return false;
+      setRespondendo(null);
+      grudadoNoFimRef.current = true;
+      await Promise.all([carregarNovidadesDaConversa(conversationId), carregarConversas({ silencioso: true })]);
+      return true;
+    } catch (erro) {
+      mostrarAviso(`Não enviou: ${erro instanceof Error ? erro.message : "erro"}`);
+      return false;
+    } finally {
+      setEnviando(false);
+      setStatusEnvio(null);
+    }
+  }
+
+  async function handleArquivosEscolhidos(lista: FileList) {
+    const conversationId = selecionadaId;
+    if (!conversationId || lista.length === 0) return;
+    const arquivos = Array.from(lista);
+    // O texto digitado vai junto, como legenda do primeiro arquivo (igual ao WhatsApp).
+    const legenda = (rascunhos[conversationId] ?? "").trim();
+    const nomes = arquivos.map((a) => a.name).join(", ");
+    if (!window.confirm(`Enviar para o cliente: ${nomes}?${legenda ? `\n\nCom a legenda: "${legenda}"` : ""}`)) return;
+    // A legenda sai do campo na hora (como no WhatsApp); se o 1º arquivo falhar, volta pro campo.
+    if (legenda) setRascunhos((atual) => ({ ...atual, [conversationId]: "" }));
+    for (const [indice, arquivo] of arquivos.entries()) {
+      const ok = await enviarArquivo(conversationId, arquivo, indice === 0 ? legenda : "");
+      if (!ok) {
+        if (indice === 0 && legenda) setRascunhos((atual) => ({ ...atual, [conversationId]: atual[conversationId] || legenda }));
+        break;
+      }
+    }
+  }
+
+  async function iniciarGravacao() {
+    const conversationId = selecionadaId;
+    if (!conversationId) return;
+    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
+      mostrarAviso("Este navegador não grava áudio.");
+      return;
+    }
+    try {
+      const fluxo = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const formato = ["audio/webm;codecs=opus", "audio/webm", "audio/ogg;codecs=opus", "audio/mp4"].find((f) => MediaRecorder.isTypeSupported(f));
+      const gravador = new MediaRecorder(fluxo, formato ? { mimeType: formato } : undefined);
+      const pedacos: Blob[] = [];
+      const controle = { gravador, cancelar: false };
+      gravador.ondataavailable = (e) => {
+        if (e.data.size > 0) pedacos.push(e.data);
+      };
+      gravador.onstop = () => {
+        fluxo.getTracks().forEach((t) => t.stop());
+        setGravandoDesde(null);
+        gravadorRef.current = null;
+        if (controle.cancelar || pedacos.length === 0) return;
+        const tipo = gravador.mimeType.split(";")[0] || "audio/webm";
+        const extensao = tipo.includes("ogg") ? "ogg" : tipo.includes("mp4") ? "m4a" : "webm";
+        const hora = new Date().toLocaleTimeString("pt-BR").replace(/:/g, "-");
+        // Vai pra conversa onde a gravação começou, mesmo que a pessoa tenha trocado de conversa.
+        void enviarArquivo(conversationId, new File(pedacos, `audio-${hora}.${extensao}`, { type: tipo }));
+      };
+      gravadorRef.current = controle;
+      gravador.start();
+      setGravandoDesde(Date.now());
+      setRelogioGravacao(Date.now());
+    } catch {
+      mostrarAviso("Sem permissão pro microfone — libere no cadeado ao lado do endereço do site.");
+    }
+  }
+
+  function pararGravacao(cancelar: boolean) {
+    const atual = gravadorRef.current;
+    if (!atual) return;
+    atual.cancelar = cancelar;
+    atual.gravador.stop();
   }
 
   async function atualizarListaEContagens() {
@@ -1041,8 +1201,15 @@ export function AtendimentoWorkspaceReal({
                 }`}
               >
                 <div className="flex items-center justify-between gap-2">
-                  <span className="truncate text-sm font-semibold text-[var(--ns-text)]">
-                    {conversa.contact?.display_name ?? "Contato sem nome"}
+                  <span className="flex min-w-0 items-center gap-1.5">
+                    <span className="truncate text-sm font-semibold text-[var(--ns-text)]">
+                      {conversa.contact?.display_name ?? "Contato sem nome"}
+                    </span>
+                    {ehContatoNovo(conversa) && (
+                      <span className="shrink-0 rounded-full bg-[var(--ns-warning)]/20 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--ns-warning)]">
+                        Contato novo
+                      </span>
+                    )}
                   </span>
                   <span className="shrink-0 text-xs text-[var(--ns-text-secondary)]">
                     {horaOuData(conversa.last_activity_at)}
@@ -1464,7 +1631,53 @@ export function AtendimentoWorkspaceReal({
                 </button>
                 <span className="ml-auto hidden text-[10px] text-[var(--ns-text-secondary)] md:inline">Enter envia · Shift+Enter pula linha</span>
               </div>
+              {statusEnvio && <p className="mb-2 text-xs text-[var(--ns-text-secondary)]" role="status">{statusEnvio}</p>}
+              {gravandoDesde !== null ? (
+                <div className="flex items-center gap-3 rounded-lg border border-[var(--ns-danger)]/40 bg-[var(--ns-danger)]/10 px-3 py-2 text-sm text-[var(--ns-text)]">
+                  <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-[var(--ns-danger)]" />
+                  Gravando {Math.floor(Math.max(0, relogioGravacao - gravandoDesde) / 60000)}:
+                  {String(Math.floor((Math.max(0, relogioGravacao - gravandoDesde) / 1000) % 60)).padStart(2, "0")}
+                  <button
+                    type="button"
+                    onClick={() => pararGravacao(true)}
+                    className="ml-auto inline-flex items-center gap-1 text-xs text-[var(--ns-text-secondary)] hover:text-[var(--ns-danger)]"
+                  >
+                    <Trash2 aria-hidden="true" className="h-3.5 w-3.5" /> Descartar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => pararGravacao(false)}
+                    className="inline-flex items-center gap-1 rounded-lg bg-[var(--ns-primary)] px-2.5 py-1.5 text-xs font-medium text-[var(--ns-primary-foreground)]"
+                  >
+                    <Square aria-hidden="true" className="h-3 w-3" /> Parar e enviar
+                  </button>
+                </div>
+              ) : (
               <div className="flex items-end gap-2">
+                {!emModoNota && (
+                  <>
+                    <input
+                      ref={entradaArquivoRef}
+                      type="file"
+                      multiple
+                      hidden
+                      onChange={(e) => {
+                        if (e.target.files) void handleArquivosEscolhidos(e.target.files);
+                        e.target.value = "";
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => entradaArquivoRef.current?.click()}
+                      disabled={enviando}
+                      title="Enviar foto, vídeo ou arquivo"
+                      aria-label="Enviar foto, vídeo ou arquivo"
+                      className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-[var(--ns-border)] text-[var(--ns-text-secondary)] hover:bg-[var(--ns-surface-hover)] disabled:opacity-50 md:h-9 md:w-9"
+                    >
+                      <Paperclip aria-hidden="true" className="h-4 w-4" />
+                    </button>
+                  </>
+                )}
                 <textarea
                   value={rascunhos[selecionadaId ?? ""] ?? ""}
                   onChange={(event) =>
@@ -1483,15 +1696,30 @@ export function AtendimentoWorkspaceReal({
                     emModoNota ? "border-[var(--ns-warning)]/50 focus-visible:ring-[var(--ns-warning)]" : "border-[var(--ns-border)] focus-visible:ring-[var(--ns-primary)]"
                   }`}
                 />
-                <button
-                  type="submit"
-                  disabled={enviando || !(rascunhos[selecionadaId ?? ""] ?? "").trim()}
-                  aria-label="Enviar"
-                  className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[var(--ns-primary)] text-[var(--ns-primary-foreground)] transition hover:opacity-90 disabled:opacity-50 md:h-9 md:w-9"
-                >
-                  <Send aria-hidden="true" className="h-4 w-4" />
-                </button>
+                {!emModoNota && !(rascunhos[selecionadaId ?? ""] ?? "").trim() ? (
+                  // Campo vazio: o botão vira microfone (como no WhatsApp).
+                  <button
+                    type="button"
+                    onClick={() => void iniciarGravacao()}
+                    disabled={enviando}
+                    title="Gravar áudio"
+                    aria-label="Gravar áudio"
+                    className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[var(--ns-primary)] text-[var(--ns-primary-foreground)] transition hover:opacity-90 disabled:opacity-50 md:h-9 md:w-9"
+                  >
+                    <Mic aria-hidden="true" className="h-4 w-4" />
+                  </button>
+                ) : (
+                  <button
+                    type="submit"
+                    disabled={enviando || !(rascunhos[selecionadaId ?? ""] ?? "").trim()}
+                    aria-label="Enviar"
+                    className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[var(--ns-primary)] text-[var(--ns-primary-foreground)] transition hover:opacity-90 disabled:opacity-50 md:h-9 md:w-9"
+                  >
+                    <Send aria-hidden="true" className="h-4 w-4" />
+                  </button>
+                )}
               </div>
+              )}
             </form>
           </>
         )}

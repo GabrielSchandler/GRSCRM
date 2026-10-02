@@ -34,10 +34,14 @@ export function evolutionConfigurada() {
   return Boolean(process.env.EVOLUTION_API_URL && process.env.EVOLUTION_API_KEY);
 }
 
-async function chamar<T>(caminho: string, opcoes: { metodo?: string; corpo?: unknown; aceitar404?: boolean } = {}): Promise<T | null> {
+async function chamar<T>(
+  caminho: string,
+  opcoes: { metodo?: string; corpo?: unknown; aceitar404?: boolean; tempoLimiteMs?: number } = {},
+): Promise<T | null> {
   const { url, chave } = configuracao();
+  const limite = opcoes.tempoLimiteMs ?? TEMPO_LIMITE_MS;
   const controlador = new AbortController();
-  const relogio = setTimeout(() => controlador.abort(), TEMPO_LIMITE_MS);
+  const relogio = setTimeout(() => controlador.abort(), limite);
   try {
     const resposta = await fetch(`${url}${caminho}`, {
       method: opcoes.metodo ?? "GET",
@@ -62,7 +66,7 @@ async function chamar<T>(caminho: string, opcoes: { metodo?: string; corpo?: unk
   } catch (erro) {
     if (erro instanceof ErroEvolution) throw erro;
     if (erro instanceof Error && erro.name === "AbortError") {
-      throw new ErroEvolution(`A Evolution não respondeu em ${TEMPO_LIMITE_MS / 1000}s (${caminho}).`);
+      throw new ErroEvolution(`A Evolution não respondeu em ${limite / 1000}s (${caminho}).`);
     }
     throw new ErroEvolution(`Não foi possível falar com a Evolution (${caminho}): ${erro instanceof Error ? erro.message : String(erro)}`);
   } finally {
@@ -150,6 +154,45 @@ export async function enviarTexto(instancia: string, telefone: string, texto: st
   const resposta = await chamar<Record<string, unknown>>(`/message/sendText/${encodeURIComponent(instancia)}`, {
     metodo: "POST",
     corpo: { number: telefone, text: texto },
+  });
+  return lerTexto(resposta, ["key", "id"]);
+}
+
+// Mídia: a Evolution baixa o arquivo do link (assinado, curto) e manda pro WhatsApp. Pode demorar
+// mais que um texto (conversão do áudio, vídeo grande), por isso o tempo limite maior.
+const TEMPO_LIMITE_MIDIA_MS = 55_000;
+
+/**
+ * Áudio como "mensagem de voz" (a bolinha com o microfone, não um arquivo). `encoding: true` faz a
+ * própria Evolution converter pra ogg/opus — o navegador grava em webm/mp4, que o WhatsApp não toca
+ * como voz. O servidor da Evolution tem o ffmpeg (conferido em 02/10/2026).
+ */
+export async function enviarAudio(instancia: string, telefone: string, urlAudio: string): Promise<string | null> {
+  const resposta = await chamar<Record<string, unknown>>(`/message/sendWhatsAppAudio/${encodeURIComponent(instancia)}`, {
+    metodo: "POST",
+    corpo: { number: telefone, audio: urlAudio, encoding: true },
+    tempoLimiteMs: TEMPO_LIMITE_MIDIA_MS,
+  });
+  return lerTexto(resposta, ["key", "id"]);
+}
+
+/** Foto, vídeo ou documento, com legenda opcional. */
+export async function enviarMidia(
+  instancia: string,
+  telefone: string,
+  midia: { tipo: "image" | "video" | "document"; url: string; mimetype: string; nomeArquivo: string; legenda: string },
+): Promise<string | null> {
+  const resposta = await chamar<Record<string, unknown>>(`/message/sendMedia/${encodeURIComponent(instancia)}`, {
+    metodo: "POST",
+    corpo: {
+      number: telefone,
+      mediatype: midia.tipo,
+      mimetype: midia.mimetype,
+      media: midia.url,
+      fileName: midia.nomeArquivo,
+      caption: midia.legenda,
+    },
+    tempoLimiteMs: TEMPO_LIMITE_MIDIA_MS,
   });
   return lerTexto(resposta, ["key", "id"]);
 }

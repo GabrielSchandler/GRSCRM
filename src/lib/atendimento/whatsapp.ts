@@ -302,6 +302,14 @@ export async function processarEventoEvolution(carga: unknown): Promise<string> 
 
 type Job = { id: string; message_id: string; conversation_id: string; attempts: number; max_attempts: number };
 
+/**
+ * Exceção à assinatura pelo primeiro nome: quem atende o cliente com outro nome. Só o que sai pro
+ * WhatsApp muda; dentro do CRM continua o nome do cadastro. (Pedido do Gabriel, 02/10/2026.)
+ */
+const NOME_NA_ASSINATURA: Record<string, string> = {
+  "4a6dc2cb-6a67-4147-8cfb-3d2a16c57312": "Alice", // Verônica Silva
+};
+
 async function processarJob(admin: Admin, job: Job) {
   const { data: conversa } = await admin
     .from("conversations")
@@ -323,14 +331,15 @@ async function processarJob(admin: Admin, job: Job) {
 
   const { data: mensagem } = await admin
     .from("messages")
-    .select("body, message_type, author:user_profiles!messages_author_user_profile_id_fkey(full_name)")
+    .select("body, message_type, author_user_profile_id, author:user_profiles!messages_author_user_profile_id_fkey(full_name)")
     .eq("id", job.message_id)
     .single();
   const autor = (mensagem as unknown as { author: { full_name: string | null } | null })?.author;
+  const autorId = (mensagem as { author_user_profile_id?: string | null } | null)?.author_user_profile_id;
   const tipo = (mensagem as { message_type?: string } | null)?.message_type ?? "texto";
   // Primeiro nome do campo "Nome" do cadastro, como era no Totalk ("*Mariza:*"). O apelido não serve:
   // em alguns cadastros ele é igual ao login (ex.: "gabriel.schandler").
-  const nome = autor?.full_name?.trim().split(/\s+/)[0] || null;
+  const nome = NOME_NA_ASSINATURA[autorId ?? ""] ?? (autor?.full_name?.trim().split(/\s+/)[0] || null);
   // Mesmo formato que o cliente já via no Totalk e que o NewSec Chat usa: nome em negrito em cima.
   const texto = nome ? `*${nome}:*\n${mensagem?.body ?? ""}` : (mensagem?.body ?? "");
 

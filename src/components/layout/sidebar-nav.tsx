@@ -12,6 +12,8 @@ import {
   Handshake,
   LayoutDashboard,
   Mail,
+  MessageCircle,
+  MessagesSquare,
   WalletCards,
   Users,
 } from "lucide-react";
@@ -40,7 +42,9 @@ export type SidebarNavigationItem = {
     | "leads"
     | "legal"
     | "finance"
-    | "academy";
+    | "academy"
+    | "chat"
+    | "internalChat";
   managerOnly?: boolean;
   adminOnly?: boolean;
 };
@@ -70,6 +74,8 @@ const icons = {
   legal: FileText,
   finance: WalletCards,
   academy: GraduationCap,
+  chat: MessagesSquare,
+  internalChat: MessageCircle,
 };
 
 function isActivePath(pathname: string, href: string) {

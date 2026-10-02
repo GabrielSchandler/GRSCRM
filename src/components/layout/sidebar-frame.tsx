@@ -83,7 +83,9 @@ export function SidebarFrame({
       (!item.adminOnly || canAccessAdminOnly) &&
       (item.href !== "/usuarios" || canAccessUsers) &&
       (item.href !== "/dashboard" || canAccessDashboard) &&
-      ((currentWorkspace === "management" &&
+      // Atendimento e chat interno aparecem em qualquer área (comercial, jurídico, financeiro...).
+      (["/atendimento", "/chat-interno"].includes(item.href) ||
+        (currentWorkspace === "management" &&
         [
           "/dashboard",
           "/aprovacoes",

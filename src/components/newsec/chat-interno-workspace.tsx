@@ -2,7 +2,7 @@
 
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { ArrowLeft, FileText, ImageIcon, LogOut, Mic, Paperclip, Plus, Search, Send, Square, Trash2, UserMinus, UserPlus, Users, X } from "lucide-react";
+import { ArrowLeft, Check, FileText, ImageIcon, LogOut, Mic, Pencil, Paperclip, Plus, Search, Send, Square, Trash2, UserMinus, UserPlus, Users, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/browser";
 import { definirFoco } from "@/lib/newsec/notificacoes";
 import { BarraCitando, BotaoResponder, BuscaNaConversa, CitacaoNaBolha, ehTelaDeCelular, irAteMensagem, Tiques, type ResultadoBusca } from "./chat-comum";
@@ -15,6 +15,7 @@ import {
   obterArquivosInternosAction,
   prepararEnvioArquivoAction,
   removerMembroGrupoAction,
+  renomearGrupoAction,
   type AnexoParaEnviar,
   type ArquivoInterno,
 } from "@/app/(newsec)/chat-interno/actions";
@@ -91,7 +92,14 @@ function rotuloDia(iso: string) {
   return data.toLocaleDateString("pt-BR", { weekday: "short", day: "2-digit", month: "2-digit", year: "numeric" });
 }
 
-export function ChatInternoWorkspace({ userProfileId }: { userProfileId: string }) {
+export function ChatInternoWorkspace({
+  userProfileId,
+  podeGerenciarGrupos,
+}: {
+  userProfileId: string;
+  /** Gerente, administrador ou master: cria grupo e altera nome/participantes (regra no banco, 0012). */
+  podeGerenciarGrupos: boolean;
+}) {
   const supabase = useMemo(() => createClient(), []);
   const [conversas, setConversas] = useState<ConversaInterna[] | null>(null);
   const [erroLista, setErroLista] = useState<string | null>(null);
@@ -452,14 +460,16 @@ export function ChatInternoWorkspace({ userProfileId }: { userProfileId: string 
               >
                 <Plus aria-hidden="true" className="h-3.5 w-3.5" /> Nova
               </button>
-              <button
-                type="button"
-                onClick={() => setModal("grupo")}
-                title="Novo grupo"
-                className="inline-flex h-8 items-center gap-1 rounded-lg border border-[var(--ns-border)] px-2 text-xs font-medium text-[var(--ns-text)] hover:bg-[var(--ns-surface-hover)]"
-              >
-                <Users aria-hidden="true" className="h-3.5 w-3.5" /> Grupo
-              </button>
+              {podeGerenciarGrupos && (
+                <button
+                  type="button"
+                  onClick={() => setModal("grupo")}
+                  title="Novo grupo"
+                  className="inline-flex h-8 items-center gap-1 rounded-lg border border-[var(--ns-border)] px-2 text-xs font-medium text-[var(--ns-text)] hover:bg-[var(--ns-surface-hover)]"
+                >
+                  <Users aria-hidden="true" className="h-3.5 w-3.5" /> Grupo
+                </button>
+              )}
             </div>
           </div>
           <input
@@ -804,6 +814,7 @@ export function ChatInternoWorkspace({ userProfileId }: { userProfileId: string 
         <ModalParticipantes
           conversa={conversa}
           userProfileId={userProfileId}
+          podeGerenciar={podeGerenciarGrupos}
           onFechar={() => setParticipantesAberto(false)}
           onAlterado={async (saiu) => {
             await carregarConversas();
@@ -980,11 +991,13 @@ function ModalNovaConversa({
 function ModalParticipantes({
   conversa,
   userProfileId,
+  podeGerenciar,
   onFechar,
   onAlterado,
 }: {
   conversa: ConversaInterna;
   userProfileId: string;
+  podeGerenciar: boolean;
   onFechar: () => void;
   onAlterado: (saiu: boolean) => Promise<void>;
 }) {
@@ -995,6 +1008,8 @@ function ModalParticipantes({
   const [erro, setErro] = useState<string | null>(null);
   const [salvando, setSalvando] = useState(false);
   const souCriador = conversa.criado_por === userProfileId;
+  const [editandoNome, setEditandoNome] = useState(false);
+  const [nome, setNome] = useState(conversa.title ?? "");
 
   useEffect(() => {
     const esc = (e: KeyboardEvent) => e.key === "Escape" && onFechar();
@@ -1026,7 +1041,35 @@ function ModalParticipantes({
     <div className="fixed inset-0 z-[80] flex items-end justify-center bg-black/40 sm:items-center sm:p-4" onMouseDown={(e) => e.target === e.currentTarget && onFechar()}>
       <div className="flex max-h-[85vh] w-full flex-col rounded-t-2xl border border-[var(--ns-border)] bg-[var(--ns-surface)] shadow-xl sm:max-w-sm sm:rounded-xl">
         <div className="flex items-center justify-between border-b border-[var(--ns-border)] px-4 py-3">
-          <h2 className="truncate text-sm font-semibold text-[var(--ns-text)]">{conversa.title ?? "Grupo"} · {conversa.membros.length + 1} pessoas</h2>
+          {editandoNome ? (
+            <form
+              className="flex min-w-0 flex-1 items-center gap-1.5"
+              onSubmit={(e) => {
+                e.preventDefault();
+                void executar(() => renomearGrupoAction(conversa.thread_id, nome).then((r) => (r.ok ? { ok: true } : r))).then(() => setEditandoNome(false));
+              }}
+            >
+              <input
+                autoFocus
+                value={nome}
+                maxLength={80}
+                onChange={(e) => setNome(e.target.value)}
+                className="min-w-0 flex-1 rounded-md border border-[var(--ns-border)] bg-[var(--ns-surface)] px-2 py-1 text-base text-[var(--ns-text)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--ns-primary)] md:text-sm"
+              />
+              <button type="submit" disabled={salvando || !nome.trim()} aria-label="Salvar nome" className="p-1 text-[var(--ns-primary)] disabled:opacity-50">
+                <Check aria-hidden="true" className="h-4 w-4" />
+              </button>
+            </form>
+          ) : (
+            <h2 className="flex min-w-0 items-center gap-1.5 text-sm font-semibold text-[var(--ns-text)]">
+              <span className="truncate">{conversa.title ?? "Grupo"} · {conversa.membros.length + 1} pessoas</span>
+              {podeGerenciar && (
+                <button type="button" onClick={() => setEditandoNome(true)} aria-label="Mudar o nome do grupo" title="Mudar o nome do grupo" className="shrink-0 p-0.5 text-[var(--ns-text-secondary)] hover:text-[var(--ns-text)]">
+                  <Pencil aria-hidden="true" className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </h2>
+          )}
           <button type="button" onClick={onFechar} aria-label="Fechar" className="p-1 text-[var(--ns-text-secondary)]">
             <X aria-hidden="true" className="h-4 w-4" />
           </button>
@@ -1045,7 +1088,7 @@ function ModalParticipantes({
                 {m.nome}
                 {conversa.criado_por === m.id ? " · criou o grupo" : ""}
               </span>
-              {souCriador && (
+              {podeGerenciar && (
                 <button
                   type="button"
                   disabled={salvando}
@@ -1090,7 +1133,11 @@ function ModalParticipantes({
 
         {erro && <p className="px-4 pb-2 text-xs text-[var(--ns-danger)]">{erro}</p>}
         <div className="flex flex-wrap gap-2 border-t border-[var(--ns-border)] p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
-          {adicionando ? (
+          {!podeGerenciar ? (
+            <p className="flex-1 self-center text-xs text-[var(--ns-text-secondary)]">
+              Só supervisor (gerente ou administrador) altera nome e participantes do grupo.
+            </p>
+          ) : adicionando ? (
             <button
               type="button"
               disabled={salvando || escolhidos.size === 0}

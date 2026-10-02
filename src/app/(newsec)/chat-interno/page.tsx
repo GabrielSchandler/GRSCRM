@@ -7,17 +7,19 @@ export const metadata: Metadata = {
   title: "Chat interno · GRS",
 };
 
-// Conversa entre funcionários. Sem link no menu do CRM antigo (mesma regra do atendimento):
-// aparece só na barra lateral do shell novo. Quem lê o quê é decidido pelo banco (RLS, 0010).
+// Conversa entre funcionários. Desde 01/10/2026 está no menu do CRM para todos os usuários.
+// Quem lê o quê é decidido pelo banco (RLS, 0010); grupo só supervisor altera (0012).
 export default async function ChatInternoPage() {
-  const { userProfileId, activeCompany } = await getCurrentUserContext();
+  const { userProfileId, activeCompany, role, isPlatformOwner } = await getCurrentUserContext();
+  // Grupo: só supervisor (gerente/administrador) ou o master cria e altera — regra garantida no banco (0012).
+  const podeGerenciarGrupos = role === "admin" || role === "manager" || Boolean(isPlatformOwner);
   const companyName = activeCompany?.trade_name ?? activeCompany?.legal_name ?? "Empresa";
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <TopBar companyName={companyName} />
       <div className="min-h-0 flex-1">
-        <ChatInternoWorkspace userProfileId={userProfileId} />
+        <ChatInternoWorkspace userProfileId={userProfileId} podeGerenciarGrupos={podeGerenciarGrupos} />
       </div>
     </div>
   );

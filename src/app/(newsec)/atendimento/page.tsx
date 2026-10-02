@@ -10,8 +10,7 @@ export const metadata: Metadata = {
 export default async function AtendimentoPage() {
   const { userProfileId, companyId, role, isPlatformOwner, activeCompany } = await getCurrentUserContext();
 
-  // Liberada pra todos os logins em 30/09/2026 (Gabriel: equipe testar), mas SEM link no menu do
-  // CRM — só quem recebe o endereço entra. O que cada um vê continua limitado pelo banco (RLS,
+  // Liberada pra todos os logins em 30/09/2026 e, desde 01/10/2026, no menu do CRM para todos. O que cada um vê continua limitado pelo banco (RLS,
   // user_can_access_conversation): consultor só enxerga as próprias conversas.
 
   const companyName = activeCompany?.trade_name ?? activeCompany?.legal_name ?? "Empresa";

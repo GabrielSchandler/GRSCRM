@@ -105,7 +105,7 @@ export async function marcarConversaInternaLidaAction(threadId: string): Promise
   await supabase.rpc("marcar_conversa_interna_lida", { p_thread_id: threadId });
 }
 
-/** Qualquer participante do grupo adiciona colegas (0011). */
+/** Só supervisor (gerente/administrador) adiciona colegas ao grupo (0012). */
 export async function adicionarMembrosGrupoAction(threadId: string, membros: string[]): Promise<ResultadoAcao<{ adicionados: number }>> {
   const { supabase } = await getCurrentUserContext();
   const { data, error } = await supabase.rpc("adicionar_membros_grupo_interno", { p_thread_id: threadId, p_membros: membros });
@@ -113,7 +113,15 @@ export async function adicionarMembrosGrupoAction(threadId: string, membros: str
   return { ok: true, dados: { adicionados: (data as number) ?? 0 } };
 }
 
-/** Quem criou o grupo remove qualquer um; qualquer pessoa remove a si mesma (= sair do grupo). */
+/** Só supervisor muda o nome do grupo (0012). */
+export async function renomearGrupoAction(threadId: string, titulo: string): Promise<ResultadoAcao> {
+  const { supabase } = await getCurrentUserContext();
+  const { error } = await supabase.rpc("renomear_grupo_interno", { p_thread_id: threadId, p_titulo: titulo });
+  if (error) return { ok: false, mensagem: error.message };
+  return { ok: true, dados: undefined };
+}
+
+/** Supervisor remove qualquer um (0012); qualquer pessoa remove a si mesma (= sair do grupo). */
 export async function removerMembroGrupoAction(threadId: string, membroId: string): Promise<ResultadoAcao> {
   const { supabase } = await getCurrentUserContext();
   const { error } = await supabase.rpc("remover_membro_grupo_interno", { p_thread_id: threadId, p_membro: membroId });

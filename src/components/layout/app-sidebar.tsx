@@ -18,6 +18,9 @@ import { SidebarFrame } from "./sidebar-frame";
 import { type SidebarNavigationItem } from "./sidebar-nav";
 
 const navigation: SidebarNavigationItem[] = [
+  // Chat (01/10/2026, pedido do Gabriel): para todos os usuários, em todas as áreas.
+  { href: "/atendimento", label: "Atendimento WhatsApp", icon: "chat" },
+  { href: "/chat-interno", label: "Chat interno", icon: "internalChat" },
   { href: "/dashboard", label: "Painel comercial", icon: "dashboard" },
   {
     href: "/aprovacoes",

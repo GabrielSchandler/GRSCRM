@@ -27,7 +27,8 @@ export function AuthenticatedShell({
 
   return (
     <div className="min-h-screen bg-slate-100 md:flex">
-      <div className="md:sticky md:top-0 md:h-screen">{sidebar}</div>
+      {/* z-40: o menu, quando abre por cima, fica acima do conteúdo da página. */}
+      <div className="md:sticky md:top-0 md:z-40 md:h-screen">{sidebar}</div>
       <div className="flex min-w-0 flex-1 flex-col">
         <main className="min-w-0 flex-1">{children}</main>
         <footer>{footer}</footer>

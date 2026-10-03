@@ -187,58 +187,64 @@ export function SidebarFrame({
         </details>
       </div>
 
-      <aside className="hidden min-h-screen w-72 flex-col border-r border-slate-200 bg-white px-4 py-5 md:flex">
-        <div className="px-2">
+      {/* Computador: só ícones; ao passar o mouse abre completo POR CIMA da tela, sem empurrar o
+          conteúdo (pedido do Gabriel, 03/10/2026). Pequeno atraso na abertura evita abrir sem querer. */}
+      <div className="relative hidden h-screen w-[72px] shrink-0 md:block">
+      <aside className="group/barra absolute inset-y-0 left-0 z-40 flex w-[72px] flex-col overflow-hidden border-r border-slate-200 bg-white px-3 py-5 transition-[width,box-shadow] duration-200 ease-out hover:w-72 hover:shadow-[8px_0_32px_-12px_rgba(15,23,42,0.25)] hover:delay-100 focus-within:w-72 focus-within:shadow-[8px_0_32px_-12px_rgba(15,23,42,0.25)]">
+        <div className="px-1">
           <div className="flex items-center gap-3">
             {companyLogoUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
                 src={companyLogoUrl}
                 alt={`Logo da empresa ${companyName}`}
-                className="h-14 w-14 rounded-md object-contain"
+                className="h-10 w-10 shrink-0 rounded-md object-contain"
               />
             ) : (
-              <div className="flex h-14 w-14 items-center justify-center rounded-md bg-slate-100 px-2 text-center text-sm font-bold uppercase tracking-wide text-slate-700">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-slate-100 text-center text-xs font-bold uppercase tracking-wide text-slate-700">
                 {companyName.slice(0, 2)}
               </div>
             )}
-            <div className="min-w-0">
+            <div className="min-w-0 whitespace-nowrap opacity-0 transition-opacity duration-150 group-hover/barra:opacity-100 group-focus-within/barra:opacity-100">
               <p className="text-xs font-semibold uppercase tracking-wide text-teal-700">
                 {workspaceLabel}
               </p>
-              <h1 className="mt-1 truncate text-xl font-semibold text-slate-950">
+              <h1 className="mt-0.5 truncate text-lg font-semibold text-slate-950">
                 {companyName}
               </h1>
             </div>
           </div>
         </div>
 
-        <div className="mt-8 flex flex-1">
-          <div className="flex flex-1 flex-col gap-4">
-            <div className="px-2">
+        <div className="mt-8 flex min-w-0 flex-1">
+          <div className="flex min-w-0 flex-1 flex-col gap-4">
+            <div>
               <Link
                 href={homeHref}
+                title="Tela inicial"
                 onClick={() => {
                   document.cookie = `${WORKSPACE_COOKIE_NAME}=${currentWorkspace}; path=/; max-age=${60 * 60 * 24 * 30}; samesite=lax`;
                 }}
-                className="inline-flex w-full items-center gap-3 rounded-lg bg-teal-700 px-3 py-3 text-sm font-semibold text-white transition hover:bg-teal-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600 focus-visible:ring-offset-2"
+                className="inline-flex w-full min-w-0 items-center gap-3 overflow-hidden rounded-lg bg-teal-700 px-4 py-3 text-sm font-semibold text-white transition hover:bg-teal-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600 focus-visible:ring-offset-2"
               >
-                <House aria-hidden="true" className="h-4 w-4" />
-                Tela inicial
+                <House aria-hidden="true" className="h-4 w-4 shrink-0" />
+                <span className="min-w-0 truncate whitespace-nowrap opacity-0 transition-opacity duration-150 group-hover/barra:opacity-100 group-focus-within/barra:opacity-100">Tela inicial</span>
               </Link>
             </div>
             <SidebarNav
               items={visibleNavigation}
               canManageTemplates={canManageTemplates}
               workspace={currentWorkspace}
+              compacto
             />
           </div>
         </div>
 
-        <div className="px-3 pb-3 text-xs text-slate-400">{footer}</div>
+        <div className="px-3 pb-3 text-xs text-slate-400 whitespace-nowrap opacity-0 transition-opacity duration-150 group-hover/barra:opacity-100 group-focus-within/barra:opacity-100">{footer}</div>
 
         {logoutNode}
       </aside>
+      </div>
     </>
   );
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { AlertTriangle, ArrowLeft, Bot, Eye, FileText, Info, MessageSquarePlus, Mic, MoreVertical, Paperclip, RefreshCw, Search, Send, Square, StickyNote, Trash2, Upload, UserPlus, Users2, X } from "lucide-react";
+import { AlertTriangle, Archive, ArrowLeft, Bot, ChevronDown, Eye, FileText, Inbox, Info, MessageSquarePlus, MessagesSquare, Mic, MoreVertical, Paperclip, RefreshCw, Search, Send, Square, StickyNote, Trash2, Upload, UserPlus, Users2, X } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/browser";
 import { definirFoco } from "@/lib/newsec/notificacoes";
@@ -273,6 +273,10 @@ export function AtendimentoWorkspaceReal({
   const [carregandoLista, setCarregandoLista] = useState(true);
   const [limiteLista, setLimiteLista] = useState(POR_PAGINA_LISTA);
   const [temMaisConversas, setTemMaisConversas] = useState(false);
+  const [arquivadosAbertos, setArquivadosAbertos] = useState(false);
+  const [arquivados, setArquivados] = useState<ConversaLista[] | null>(null);
+  const [totalArquivados, setTotalArquivados] = useState<number | null>(null);
+  const [limiteArquivados, setLimiteArquivados] = useState(POR_PAGINA_LISTA);
   const [naoLidasPorAba, setNaoLidasPorAba] = useState<Record<Aba, number | null>>({ meus: null, outros: null, ia: null });
   const [atualizadoEm, setAtualizadoEm] = useState<Date | null>(null);
 
@@ -354,18 +358,22 @@ export function AtendimentoWorkspaceReal({
    * (TS2589) — o retorno de cada chamador já é tipado explicitamente onde importa.
    */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  function comEscopoDaAba(query: any, valorAba: Aba): any {
+  function comEscopoDaAba(query: any, valorAba: Aba, arquivados = false): any {
     let escopado = query.eq("company_id", companyId);
+    // Concluída vai pra "Arquivados" (fim da lista, recolhido) — pedido do Gabriel, 02/10/2026.
+    escopado = arquivados ? escopado.eq("status", "encerrada") : escopado.neq("status", "encerrada");
     if (valorAba === "meus") {
       escopado = escopado.eq("assigned_user_profile_id", userProfileId);
     } else if (valorAba === "ia") {
-      escopado = escopado.eq("status", "ia");
+      // Aba IA = só conversa SEM consultor (o banco também garante: 0014).
+      escopado = escopado.eq("status", "ia").is("assigned_user_profile_id", null);
     } else {
-      // "Outros" = atendimento humano de outro login — atribuído a outra pessoa, ou ainda sem
-      // ninguém (fila). Nunca repete o que já está em "Meus" (por isso o `.neq`, não só excluir
-      // a IA) — `.or()` cobre o nulo porque `assigned_user_profile_id <> meuId` sozinho descarta
-      // linha nula em SQL (NULL <> x nunca é verdadeiro).
-      escopado = escopado.neq("status", "ia").or(`assigned_user_profile_id.is.null,assigned_user_profile_id.neq.${userProfileId}`);
+      // "Outros" = de outro consultor, ou sem ninguém fora da IA (fila). Nunca repete "Meus" — `.or()`
+      // cobre o nulo porque `assigned <> meuId` sozinho descarta linha nula em SQL. O segundo `.or()`
+      // tira só o que é da aba IA (sem consultor e com status ia).
+      escopado = escopado
+        .or(`assigned_user_profile_id.is.null,assigned_user_profile_id.neq.${userProfileId}`)
+        .or("assigned_user_profile_id.not.is.null,status.neq.ia");
     }
     return escopado;
   }
@@ -728,6 +736,39 @@ export function AtendimentoWorkspaceReal({
     carregarContagensAbas();
   }, [carregarContagensAbas]);
 
+  /** Concluídas da aba atual: o número sempre; a lista só quando a seção está aberta. */
+  const carregarArquivados = useCallback(async () => {
+    if (aba === "ia") {
+      setTotalArquivados(null);
+      setArquivados(null);
+      return;
+    }
+    const [{ count }, lista] = await Promise.all([
+      comEscopoDaAba(supabase.from("conversations").select("id", { count: "exact", head: true }), aba, true),
+      arquivadosAbertos
+        ? comEscopoDaAba(supabase.from("conversations").select(SELECT_CONVERSAS), aba, true)
+            .eq("ultima_mensagem.is_internal_note", false)
+            .order("created_at", { referencedTable: "ultima_mensagem", ascending: false })
+            .limit(1, { referencedTable: "ultima_mensagem" })
+            .order("last_activity_at", { ascending: false })
+            .limit(limiteArquivados)
+        : Promise.resolve({ data: null }),
+    ]);
+    if (count !== null) setTotalArquivados(count);
+    if (arquivadosAbertos && lista.data) setArquivados(lista.data as unknown as ConversaLista[]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [supabase, aba, arquivadosAbertos, limiteArquivados, userProfileId, companyId]);
+
+  useEffect(() => {
+    setArquivadosAbertos(false);
+    setArquivados(null);
+    setLimiteArquivados(POR_PAGINA_LISTA);
+  }, [aba]);
+
+  useEffect(() => {
+    void carregarArquivados();
+  }, [carregarArquivados]);
+
   // A aba "IA" não tem os sub-filtros de "quem precisa de humano" — se o usuário
   // trocar de aba com um sub-filtro selecionado, volta pra "Todas" em vez de aplicar
   // um filtro que não faz sentido ali (nunca some silenciosamente, nunca fica preso).
@@ -767,6 +808,7 @@ export function AtendimentoWorkspaceReal({
     await Promise.all([
       carregarConversas({ silencioso: true }),
       carregarContagensAbas(),
+      carregarArquivados(),
       // Fila de envio do WhatsApp: o que falhou na hora é re-tentado aqui (não há worker separado).
       despacharPendentesAction().catch(() => 0),
       selecionadaId ? carregarNovidadesDaConversa(selecionadaId) : Promise.resolve(),
@@ -1078,7 +1120,7 @@ export function AtendimentoWorkspaceReal({
   }
 
   async function atualizarListaEContagens() {
-    await Promise.all([carregarConversas({ silencioso: true }), carregarContagensAbas()]);
+    await Promise.all([carregarConversas({ silencioso: true }), carregarContagensAbas(), carregarArquivados()]);
   }
 
   async function handleAssumir() {
@@ -1115,159 +1157,298 @@ export function AtendimentoWorkspaceReal({
     await carregarNovidadesDaConversa(selecionadaId);
   }
 
+  function renderizarItem(conversa: ConversaLista, arquivada: boolean) {
+    const telefone = formatarTelefone(telefoneDoContato(conversa.contact));
+    const naoLida = conversa.unread_count > 0;
+    const selecionada = conversa.id === selecionadaId;
+    const novo = ehContatoNovo(conversa);
+    const daIa = conversa.status === "ia" && !conversa.assigned_user_profile_id;
+    const nome = conversa.contact?.display_name ?? "Contato sem nome";
+    // Fora de "Meus", mostra de quem é (primeiro nome) — ajuda gerente a achar e distribuir.
+    const dono = aba !== "meus" || busca.trim() ? conversa.assigned_user_profile?.full_name?.trim().split(/\s+/)[0] : null;
+    return (
+      <button
+        key={conversa.id}
+        type="button"
+        onClick={() => {
+          if (arquivada) setConversaFixada(conversa);
+          abrirConversa(conversa);
+        }}
+        aria-current={selecionada ? "true" : undefined}
+        className={`relative flex w-full gap-3 px-4 py-3 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--ns-primary)] ${
+          selecionada ? "bg-[var(--ns-primary)]/[0.08]" : "hover:bg-[var(--ns-surface-hover)]"
+        } ${arquivada && !selecionada ? "opacity-80 hover:opacity-100" : ""}`}
+      >
+        {selecionada && <span aria-hidden="true" className="absolute inset-y-2 left-0 w-[3px] rounded-r-full bg-[var(--ns-primary)]" />}
+        <span className="relative shrink-0">
+          <span
+            className={`flex h-10 w-10 items-center justify-center rounded-full text-[13px] font-semibold ${
+              daIa
+                ? "bg-violet-500/15 text-violet-600 dark:text-violet-300"
+                : arquivada
+                  ? "bg-[var(--ns-surface-hover)] text-[var(--ns-text-secondary)]"
+                  : "bg-[var(--ns-primary)]/12 text-[var(--ns-primary)]"
+            }`}
+          >
+            {daIa ? <Bot aria-hidden="true" className="h-4 w-4" /> : iniciaisDe(conversa.contact?.display_name ?? null)}
+          </span>
+          {naoLida && (
+            <span aria-hidden="true" className="absolute -right-0.5 -top-0.5 h-3 w-3 rounded-full border-2 border-[var(--ns-surface)] bg-[var(--ns-primary)]" />
+          )}
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="flex items-baseline gap-2">
+            <span className={`min-w-0 flex-1 truncate text-sm text-[var(--ns-text)] ${naoLida ? "font-semibold" : "font-medium"}`}>{nome}</span>
+            <span className={`shrink-0 text-[11px] tabular-nums ${naoLida ? "font-semibold text-[var(--ns-primary)]" : "text-[var(--ns-text-secondary)]"}`}>
+              {horaOuData(conversa.last_activity_at)}
+            </span>
+          </span>
+          <span className="mt-0.5 flex items-center gap-2">
+            <span className={`min-w-0 flex-1 truncate text-[13px] ${naoLida ? "text-[var(--ns-text)]" : "text-[var(--ns-text-secondary)]"}`}>
+              {previaLegivel(conversa.last_message_preview)}
+            </span>
+            {naoLida && (
+              <span className="inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-[var(--ns-primary)] px-1.5 text-[11px] font-semibold tabular-nums text-[var(--ns-primary-foreground)]">
+                {conversa.unread_count}
+              </span>
+            )}
+          </span>
+          <span className="mt-1.5 flex min-w-0 items-center gap-1.5">
+            {novo && (
+              <span className="shrink-0 rounded-full bg-[var(--ns-warning)]/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--ns-warning)]">
+                Contato novo
+              </span>
+            )}
+            <EstadoBadge estado={STATUS_PARA_BADGE[conversa.status]} />
+            <span className="min-w-0 truncate text-[11px] text-[var(--ns-text-secondary)]">
+              {telefone ?? conversa.channel?.name ?? "Canal"}
+              {dono ? ` · ${dono}` : ""}
+            </span>
+          </span>
+        </span>
+      </button>
+    );
+  }
+
   return (
     <div className="flex h-full min-h-0 w-full">
       {/* Celular: lista e conversa são duas telas (abre a conversa → some a lista; "voltar" → lista). */}
-      <div className={`${conversaSelecionada ? "hidden lg:flex" : "flex"} h-full w-full shrink-0 flex-col border-r border-[var(--ns-border)] lg:w-[300px]`}>
-        <div className="border-b border-[var(--ns-border)] px-3 pt-3">
-          <div className="mb-3 flex items-center justify-between gap-2">
-            <h1 className="text-lg font-semibold text-[var(--ns-text)]">Atendimento</h1>
+      <aside
+        className={`${conversaSelecionada ? "hidden lg:flex" : "flex"} h-full w-full shrink-0 flex-col border-r border-[var(--ns-border)] bg-[var(--ns-surface)] lg:w-[340px]`}
+      >
+        <div className="flex flex-col gap-3 px-4 pb-3 pt-4">
+          <div className="flex items-start gap-3">
+            <div className="min-w-0 flex-1">
+              <h1 className="text-[17px] font-semibold leading-tight tracking-tight text-[var(--ns-text)]">Atendimento</h1>
+              <button
+                type="button"
+                onClick={() => void atualizarAgoraRef.current()}
+                title="Atualiza sozinho a cada 15 s — clique para atualizar agora"
+                className="mt-1 inline-flex items-center gap-1 rounded text-[11px] text-[var(--ns-text-secondary)] transition hover:text-[var(--ns-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ns-primary)]"
+              >
+                <RefreshCw aria-hidden="true" className={`h-3 w-3 ${carregandoLista ? "animate-spin" : ""}`} />
+                {atualizadoEm ? `Atualizado às ${horaCurta(atualizadoEm.toISOString())}` : "Atualizando..."}
+              </button>
+            </div>
             <button
               type="button"
               onClick={() => setNovaConversaAberta(true)}
               title="Nova conversa: iniciar com um número"
               aria-label="Nova conversa"
-              className="ml-auto inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-lg bg-[var(--ns-primary)] px-2 py-1 text-xs font-medium text-[var(--ns-primary-foreground)] hover:opacity-90"
+              className="inline-flex h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg bg-[var(--ns-primary)] px-3 text-sm font-medium text-[var(--ns-primary-foreground)] shadow-sm transition hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ns-primary)] focus-visible:ring-offset-2"
             >
-              <MessageSquarePlus aria-hidden="true" className="h-3.5 w-3.5" /> Nova
-            </button>
-            <button
-              type="button"
-              onClick={() => void atualizarAgoraRef.current()}
-              title={atualizadoEm ? `Atualiza sozinho a cada 15 s · última vez às ${horaCurta(atualizadoEm.toISOString())}` : "Atualizar"}
-              className="inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-[11px] text-[var(--ns-text-secondary)] transition hover:bg-[var(--ns-surface-hover)] hover:text-[var(--ns-text)]"
-            >
-              <RefreshCw aria-hidden="true" className="h-3 w-3" />
-              {atualizadoEm ? horaCurta(atualizadoEm.toISOString()) : "Atualizar"}
+              <MessageSquarePlus aria-hidden="true" className="h-4 w-4" /> Nova
             </button>
           </div>
-        </div>
-        <div className="flex flex-col gap-3 border-b border-[var(--ns-border)] p-3">
-          <input
-            type="search"
-            value={busca}
-            onChange={(event) => {
-              // Começou a buscar: zera os filtros (eles somem enquanto houver busca).
-              if (!busca.trim() && event.target.value.trim()) setSubFiltro("todas");
-              setBusca(event.target.value);
-            }}
-            placeholder="Buscar por nome ou telefone..."
-            className="w-full rounded-lg border border-[var(--ns-border)] bg-[var(--ns-surface)] px-3 py-2 text-sm text-[var(--ns-text)] outline-none placeholder:text-[var(--ns-text-secondary)] focus-visible:ring-2 focus-visible:ring-[var(--ns-primary)]"
-          />
+
+          <div className="relative">
+            <Search aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--ns-text-secondary)]" />
+            <input
+              type="search"
+              value={busca}
+              onChange={(event) => {
+                // Começou a buscar: zera os filtros (eles somem enquanto houver busca).
+                if (!busca.trim() && event.target.value.trim()) setSubFiltro("todas");
+                setBusca(event.target.value);
+              }}
+              placeholder="Buscar por nome ou telefone"
+              aria-label="Buscar conversa por nome ou telefone"
+              className="h-10 w-full rounded-xl border border-[var(--ns-border)] bg-[var(--ns-bg)] pl-9 pr-9 text-sm text-[var(--ns-text)] outline-none transition placeholder:text-[var(--ns-text-secondary)] focus:border-[var(--ns-primary)] focus:bg-[var(--ns-surface)] focus:ring-4 focus:ring-[var(--ns-primary)]/15 [&::-webkit-search-cancel-button]:hidden"
+            />
+            {busca && (
+              <button
+                type="button"
+                onClick={() => setBusca("")}
+                aria-label="Limpar busca"
+                className="absolute right-2 top-1/2 inline-flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-md text-[var(--ns-text-secondary)] hover:bg-[var(--ns-surface-hover)] hover:text-[var(--ns-text)]"
+              >
+                <X aria-hidden="true" className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
           {buscaAplicada.trim().length >= 2 && (
-            <p className="-mt-1 text-[11px] text-[var(--ns-text-secondary)]">
-              Buscando em todas as conversas, sem filtro. Apague a busca para voltar às abas.
+            <p className="-mt-1 text-[11px] leading-snug text-[var(--ns-text-secondary)]">
+              Buscando em todas as conversas, inclusive arquivadas. Apague a busca para voltar às abas.
             </p>
           )}
-          {/* Pergunta 1: de quem é a conversa? "Outros" é o atendimento humano de outro login (atribuído a
-              outra pessoa, ou ainda sem ninguém) — não é "a equipe" no sentido de departamento/`teams`,
-              porque quem supervisiona pode ver conversa de qualquer equipe aqui, não só a própria. "IA" só
-              existe pra quem supervisiona — quem atende comum não vê conversa de ninguém além da própria
-              (RLS já garante isso; aqui é só não oferecer a aba). */}
+
+          {/* Pergunta 1: de quem é a conversa? "Meus" = minhas; "Outros" = de outro consultor ou na fila;
+              "IA" = sem consultor (só gerente/administrador vê). */}
           {!busca.trim() && abasVisiveis.length > 1 && (
-          <div className="flex gap-1 rounded-lg bg-[var(--ns-surface-hover)] p-1 text-sm">
-            {abasVisiveis.map((valor) => (
-              <button
-                key={valor}
-                type="button"
-                onClick={() => setAba(valor)}
-                className={`flex flex-1 items-center justify-center gap-1 rounded-md px-2 py-1.5 font-medium transition ${
-                  aba === valor ? "bg-[var(--ns-surface)] text-[var(--ns-text)] shadow-sm" : "text-[var(--ns-text-secondary)] hover:text-[var(--ns-text)]"
-                }`}
-              >
-                {valor === "ia" && <Bot aria-hidden="true" className="h-3.5 w-3.5" />}
-                {valor === "meus" ? "Meus" : valor === "outros" ? "Outros" : "IA"}
-                {contagensAbas[valor] !== null && (
-                  <span className="text-[11px] font-normal text-[var(--ns-text-secondary)]">{contagensAbas[valor]}</span>
-                )}
-              </button>
-            ))}
-          </div>
+            <div role="tablist" aria-label="De quem é a conversa" className="grid grid-cols-3 gap-1 rounded-xl bg-[var(--ns-surface-hover)] p-1">
+              {abasVisiveis.map((valor) => {
+                const ativa = aba === valor;
+                const naoLidas = naoLidasPorAba[valor] ?? 0;
+                return (
+                  <button
+                    key={valor}
+                    type="button"
+                    role="tab"
+                    aria-selected={ativa}
+                    onClick={() => setAba(valor)}
+                    className={`relative flex items-center justify-center gap-1.5 rounded-lg px-2 py-1.5 text-[13px] font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ns-primary)] ${
+                      ativa ? "bg-[var(--ns-surface)] text-[var(--ns-text)] shadow-sm" : "text-[var(--ns-text-secondary)] hover:text-[var(--ns-text)]"
+                    }`}
+                  >
+                    {valor === "ia" && <Bot aria-hidden="true" className="h-3.5 w-3.5" />}
+                    {valor === "meus" ? "Meus" : valor === "outros" ? "Outros" : "IA"}
+                    {contagensAbas[valor] !== null && (
+                      <span
+                        className={`rounded-full px-1.5 text-[10px] font-semibold tabular-nums ${
+                          ativa ? "bg-[var(--ns-primary)]/12 text-[var(--ns-primary)]" : "bg-[var(--ns-border)]/70 text-[var(--ns-text-secondary)]"
+                        }`}
+                      >
+                        {contagensAbas[valor]}
+                      </span>
+                    )}
+                    {naoLidas > 0 && !ativa && (
+                      <span aria-label={`${naoLidas} não lidas`} className="absolute right-1.5 top-1 h-1.5 w-1.5 rounded-full bg-[var(--ns-primary)]" />
+                    )}
+                  </button>
+                );
+              })}
+            </div>
           )}
 
           {/* Pergunta 2: o que falta fazer? Não existe pra "IA" — lá ninguém da equipe "lê" ou "responde". */}
           {!busca.trim() && aba !== "ia" && (
-            <div className="flex gap-1 rounded-lg bg-[var(--ns-surface-hover)] p-1 text-xs">
-              {SUB_FILTROS.map((filtro) => (
-                <button
-                  key={filtro.id}
-                  type="button"
-                  title={filtro.ajuda}
-                  onClick={() => setSubFiltro(filtro.id)}
-                  className={`flex-1 rounded-md px-1.5 py-1 font-medium transition ${
-                    subFiltro === filtro.id ? "bg-[var(--ns-surface)] text-[var(--ns-text)] shadow-sm" : "text-[var(--ns-text-secondary)] hover:text-[var(--ns-text)]"
-                  }`}
-                >
-                  {filtro.rotulo}
-                  {contagensSubFiltro[filtro.id] !== null && (
-                    <span className="ml-1 text-[10px] font-normal text-[var(--ns-text-secondary)]">{contagensSubFiltro[filtro.id]}</span>
-                  )}
-                </button>
-              ))}
+            <div className="flex flex-wrap gap-1.5">
+              {SUB_FILTROS.map((filtro) => {
+                const ativo = subFiltro === filtro.id;
+                return (
+                  <button
+                    key={filtro.id}
+                    type="button"
+                    title={filtro.ajuda}
+                    aria-pressed={ativo}
+                    onClick={() => setSubFiltro(filtro.id)}
+                    className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ns-primary)] ${
+                      ativo
+                        ? "border-[var(--ns-primary)]/40 bg-[var(--ns-primary)]/10 text-[var(--ns-primary)]"
+                        : "border-[var(--ns-border)] text-[var(--ns-text-secondary)] hover:border-[var(--ns-text-secondary)]/40 hover:text-[var(--ns-text)]"
+                    }`}
+                  >
+                    {filtro.rotulo}
+                    {contagensSubFiltro[filtro.id] !== null && <span className="tabular-nums opacity-70">{contagensSubFiltro[filtro.id]}</span>}
+                  </button>
+                );
+              })}
             </div>
           )}
         </div>
 
-        <div className="flex-1 overflow-y-auto">
-          {carregandoLista && <p className="p-4 text-sm text-[var(--ns-text-secondary)]">Carregando...</p>}
+        <div className="flex-1 overflow-y-auto border-t border-[var(--ns-border)]">
+          {carregandoLista && !conversas && (
+            <div aria-hidden="true">
+              {Array.from({ length: 7 }).map((_, i) => (
+                <div key={i} className="flex gap-3 px-4 py-3.5">
+                  <div className="h-10 w-10 shrink-0 animate-pulse rounded-full bg-[var(--ns-surface-hover)]" />
+                  <div className="flex-1 space-y-2 pt-1">
+                    <div className="h-3 w-2/3 animate-pulse rounded bg-[var(--ns-surface-hover)]" />
+                    <div className="h-2.5 w-full animate-pulse rounded bg-[var(--ns-surface-hover)]" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
           {erroLista && (
             <p className="m-3 rounded-lg border border-[var(--ns-danger)]/40 bg-[var(--ns-danger)]/10 p-2.5 text-xs text-[var(--ns-danger)]">
               {erroLista}
             </p>
           )}
           {!carregandoLista && !erroLista && conversasFiltradas.length === 0 && (
-            <p className="p-6 text-center text-sm text-[var(--ns-text-secondary)]">Nenhuma conversa nesse filtro.</p>
+            <div className="flex flex-col items-center px-6 py-10 text-center">
+              <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-full bg-[var(--ns-surface-hover)] text-[var(--ns-text-secondary)]">
+                <Inbox aria-hidden="true" className="h-5 w-5" />
+              </div>
+              <p className="text-sm font-medium text-[var(--ns-text)]">
+                {busca.trim() ? "Nada encontrado" : aba === "ia" ? "Nenhum contato com a IA" : "Tudo em dia por aqui"}
+              </p>
+              <p className="mt-1 text-xs leading-relaxed text-[var(--ns-text-secondary)]">
+                {busca.trim()
+                  ? "Confira o nome ou tente pelo telefone."
+                  : aba === "ia"
+                    ? "Contatos novos aparecem aqui até alguém assumir ou transferir."
+                    : "Nenhuma conversa aberta neste filtro."}
+              </p>
+            </div>
           )}
-          {conversasFiltradas.map((conversa) => {
-            const telefone = formatarTelefone(telefoneDoContato(conversa.contact));
-            return (
-              <button
-                key={conversa.id}
-                type="button"
-                onClick={() => abrirConversa(conversa)}
-                className={`flex w-full flex-col gap-1 border-b border-[var(--ns-border)] px-3 py-3 text-left transition ${
-                  conversa.id === selecionadaId ? "bg-[var(--ns-primary)]/10" : "hover:bg-[var(--ns-surface-hover)]"
-                }`}
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <span className="flex min-w-0 items-center gap-1.5">
-                    <span className="truncate text-sm font-semibold text-[var(--ns-text)]">
-                      {conversa.contact?.display_name ?? "Contato sem nome"}
-                    </span>
-                    {ehContatoNovo(conversa) && (
-                      <span className="shrink-0 rounded-full bg-[var(--ns-warning)]/20 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--ns-warning)]">
-                        Contato novo
-                      </span>
-                    )}
-                  </span>
-                  <span className="shrink-0 text-xs text-[var(--ns-text-secondary)]">
-                    {horaOuData(conversa.last_activity_at)}
-                  </span>
-                </div>
-                <span className="truncate text-xs text-[var(--ns-text-secondary)]">{previaLegivel(conversa.last_message_preview)}</span>
-                <div className="flex items-center gap-2">
-                  <EstadoBadge estado={STATUS_PARA_BADGE[conversa.status]} />
-                  <span className="truncate text-[11px] text-[var(--ns-text-secondary)]">{telefone ?? conversa.channel?.name ?? "Canal"}</span>
-                  {conversa.unread_count > 0 && (
-                    <span className="ml-auto inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-[var(--ns-primary)] px-1 text-[11px] font-semibold text-[var(--ns-primary-foreground)]">
-                      {conversa.unread_count}
-                    </span>
-                  )}
-                </div>
-              </button>
-            );
-          })}
+
+          {conversasFiltradas.map((conversa) => renderizarItem(conversa, false))}
+
           {temMaisConversas && !carregandoLista && (
             <button
               type="button"
               onClick={() => setLimiteLista((atual) => atual + POR_PAGINA_LISTA)}
-              className="w-full px-3 py-3 text-center text-xs font-medium text-[var(--ns-primary)] hover:bg-[var(--ns-surface-hover)]"
+              className="w-full px-4 py-3 text-center text-xs font-medium text-[var(--ns-primary)] hover:bg-[var(--ns-surface-hover)]"
             >
               Carregar mais conversas
             </button>
           )}
+
+          {/* Arquivados: concluídas, no fim da lista, recolhidas — só aparecem ao clicar. */}
+          {!busca.trim() && aba !== "ia" && (totalArquivados ?? 0) > 0 && (
+            <div className="border-t border-[var(--ns-border)]">
+              <button
+                type="button"
+                onClick={() => setArquivadosAbertos((atual) => !atual)}
+                aria-expanded={arquivadosAbertos}
+                className="flex w-full items-center gap-3 px-4 py-3 text-left transition hover:bg-[var(--ns-surface-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--ns-primary)]"
+              >
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[var(--ns-surface-hover)] text-[var(--ns-text-secondary)]">
+                  <Archive aria-hidden="true" className="h-4 w-4" />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-sm font-medium text-[var(--ns-text)]">Arquivados</span>
+                  <span className="block text-[11px] text-[var(--ns-text-secondary)]">Conversas concluídas</span>
+                </span>
+                <span className="rounded-full bg-[var(--ns-surface-hover)] px-2 py-0.5 text-[11px] font-semibold tabular-nums text-[var(--ns-text-secondary)]">
+                  {totalArquivados}
+                </span>
+                <ChevronDown aria-hidden="true" className={`h-4 w-4 text-[var(--ns-text-secondary)] transition-transform ${arquivadosAbertos ? "rotate-180" : ""}`} />
+              </button>
+              {arquivadosAbertos && (
+                <div className="bg-[var(--ns-bg)]/60">
+                  {arquivados === null ? (
+                    <p className="px-4 py-3 text-xs text-[var(--ns-text-secondary)]">Carregando...</p>
+                  ) : (
+                    arquivados.map((conversa) => renderizarItem(conversa, true))
+                  )}
+                  {arquivados && arquivados.length < (totalArquivados ?? 0) && (
+                    <button
+                      type="button"
+                      onClick={() => setLimiteArquivados((atual) => atual + POR_PAGINA_LISTA)}
+                      className="w-full px-4 py-3 text-center text-xs font-medium text-[var(--ns-primary)] hover:bg-[var(--ns-surface-hover)]"
+                    >
+                      Carregar mais arquivadas
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
         </div>
-      </div>
+      </aside>
 
       <div
         className={`${conversaSelecionada ? "flex" : "hidden lg:flex"} @container relative h-full min-w-0 flex-1 flex-col lg:min-w-[420px]`}
@@ -1293,8 +1474,14 @@ export function AtendimentoWorkspaceReal({
           </div>
         )}
         {!conversaSelecionada ? (
-          <div className="flex flex-1 items-center justify-center text-sm text-[var(--ns-text-secondary)]">
-            Selecione uma conversa.
+          <div className="flex flex-1 flex-col items-center justify-center px-6 text-center">
+            <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-[var(--ns-primary)]/10 text-[var(--ns-primary)]">
+              <MessagesSquare aria-hidden="true" className="h-7 w-7" />
+            </div>
+            <p className="text-base font-semibold text-[var(--ns-text)]">Selecione uma conversa.</p>
+            <p className="mt-1 max-w-xs text-balance text-sm leading-relaxed text-[var(--ns-text-secondary)]">
+              Escolha um contato na lista para ver as mensagens. Nada é marcado como lido até você abrir.
+            </p>
           </div>
         ) : (
           <>
@@ -1811,6 +1998,8 @@ export function AtendimentoWorkspaceReal({
         className={`${
           painelAberto ? "fixed inset-y-0 right-0 z-[65] flex w-[min(92vw,360px)] bg-[var(--ns-surface)] shadow-xl" : "hidden"
         } h-full shrink-0 flex-col overflow-y-auto border-l border-[var(--ns-border)] xl:static xl:z-auto xl:flex xl:w-[320px] xl:bg-transparent xl:shadow-none`}
+        // Sem conversa aberta o painel do cliente some (antes repetia "Selecione uma conversa").
+        style={conversaSelecionada ? undefined : { display: "none" }}
       >
         <div className="flex justify-end px-2 pt-2 xl:hidden">
           <button type="button" onClick={() => setPainelAberto(false)} aria-label="Fechar painel" className="p-1.5 text-[var(--ns-text-secondary)]">

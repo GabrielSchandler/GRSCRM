@@ -390,7 +390,7 @@ export async function concluirConversaAction(conversationId: string): Promise<At
   if (error) return { ok: false, message: `Não foi possível concluir: ${error.message}.` };
   if (!data || data.length === 0) return { ok: false, message: "Você não tem acesso a esta conversa." };
 
-  return { ok: true, message: "Conversa concluída." };
+  return { ok: true, message: "Conversa concluída e arquivada." };
 }
 
 /**
@@ -424,9 +424,11 @@ export async function reenviarMensagemFalhadaAction(messageId: string, conversat
 export async function reabrirConversaAction(conversationId: string): Promise<AtendimentoActionState> {
   const { supabase } = await getCurrentUserContext();
 
+  // Sai de "Arquivados": com consultor volta pro atendimento dele; sem consultor volta pra aba IA.
+  const { data: atual } = await supabase.from("conversations").select("assigned_user_profile_id").eq("id", conversationId).maybeSingle();
   const { data, error } = await supabase
     .from("conversations")
-    .update({ status: "aguardando_humano" })
+    .update({ status: atual?.assigned_user_profile_id ? "humano" : "ia" })
     .eq("id", conversationId)
     .select("id");
 

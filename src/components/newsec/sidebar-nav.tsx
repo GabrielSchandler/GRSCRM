@@ -16,7 +16,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
-type NavItem = {
+export type NavItem = {
   href: string;
   label: string;
   icon: LucideIcon;
@@ -24,6 +24,8 @@ type NavItem = {
   disponivel: boolean;
   /** Abre fora do shell novo, numa rota já existente do CRM (visual antigo, dado real). */
   externo?: boolean;
+  /** Grupo no menu: atendimento (shell novo) ou telas do CRM. */
+  grupo: "atendimento" | "crm";
 };
 
 /**
@@ -34,24 +36,27 @@ type NavItem = {
  * MIGRATION_RULES.md do newseccrm: telas migram uma a uma, nessa ordem.
  */
 const ITEMS: NavItem[] = [
-  { href: "/atendimento", label: "Atendimento", icon: MessagesSquare, disponivel: true },
-  { href: "/chat-interno", label: "Chat interno", icon: MessageCircle, disponivel: true },
-  { href: "/clientes", label: "Clientes", icon: Users, disponivel: true, externo: true },
-  { href: "/comercial", label: "Comercial", icon: Briefcase, disponivel: true, externo: true },
-  { href: "/juridico", label: "Jurídico", icon: Scale, disponivel: true, externo: true },
-  { href: "/financeiro", label: "Financeiro", icon: Wallet, disponivel: true, externo: true },
-  { href: "/academy", label: "Academia", icon: GraduationCap, disponivel: true, externo: true },
-  { href: "/dashboards", label: "Dashboards", icon: LayoutDashboard, disponivel: false },
-  { href: "/produtividade", label: "Produtividade", icon: Activity, disponivel: false },
-  { href: "/configuracoes", label: "Configurações", icon: Settings, disponivel: false },
+  { href: "/atendimento", label: "Atendimento", icon: MessagesSquare, disponivel: true, grupo: "atendimento" },
+  { href: "/chat-interno", label: "Chat interno", icon: MessageCircle, disponivel: true, grupo: "atendimento" },
+  { href: "/clientes", label: "Clientes", icon: Users, disponivel: true, externo: true, grupo: "crm" },
+  { href: "/comercial", label: "Comercial", icon: Briefcase, disponivel: true, externo: true, grupo: "crm" },
+  { href: "/juridico", label: "Jurídico", icon: Scale, disponivel: true, externo: true, grupo: "crm" },
+  { href: "/financeiro", label: "Financeiro", icon: Wallet, disponivel: true, externo: true, grupo: "crm" },
+  { href: "/academy", label: "Academia", icon: GraduationCap, disponivel: true, externo: true, grupo: "crm" },
+  { href: "/dashboards", label: "Dashboards", icon: LayoutDashboard, disponivel: false, grupo: "crm" },
+  { href: "/produtividade", label: "Produtividade", icon: Activity, disponivel: false, grupo: "crm" },
+  { href: "/configuracoes", label: "Configurações", icon: Settings, disponivel: false, grupo: "crm" },
 ];
+
+/** Só o que funciona hoje — item desativado no menu só atrapalha (pedido do Gabriel, 02/10/2026). */
+export const ITENS_DISPONIVEIS = ITEMS.filter((item) => item.disponivel);
 
 export function NewSecSidebarNav() {
   const pathname = usePathname();
 
   return (
     <nav aria-label="Navegação principal" className="flex flex-col gap-0.5 px-2">
-      {ITEMS.map((item) => {
+      {ITENS_DISPONIVEIS.map((item) => {
         // Esta barra só aparece dentro de /atendimento, que não tem link no menu do CRM antigo.
         const disponivelAgora = item.disponivel;
         const isActive = !item.externo && pathname === item.href;

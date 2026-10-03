@@ -24,8 +24,13 @@ body {
   font-family: Arial, Helvetica, sans-serif;
 }
 
-button,
-input {
+/*
+ * CRM antigo: como sempre foi. Fora da camada do Tailwind, esta regra vence as classes de tamanho
+ * (text-xs, text-sm...) — por isso NÃO vale dentro do shell novo (.ns-shell), onde o preflight do
+ * Tailwind já herda a fonte e as classes de tamanho precisam funcionar.
+ */
+button:not(.ns-shell *),
+input:not(.ns-shell *) {
   font: inherit;
 }
 

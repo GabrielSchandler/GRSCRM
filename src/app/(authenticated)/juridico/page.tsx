@@ -221,9 +221,13 @@ export default async function JuridicoPage({ searchParams }: JuridicoPageProps) 
     <>
       <PageHeader
         title="Esteira jurídica"
-        description="Acompanhe em que fase cada cliente está, há quanto tempo e gere os documentos da etapa certa."
+        description="SLA, responsáveis, documentos e movimentações em um quadro operacional."
       />
       <div className="space-y-6 p-6">
+        <div>
+          <h1 className="text-2xl font-semibold text-[#11182E]">Esteira jurídica</h1>
+          <p className="mt-1 text-sm text-[#69738A]">Priorize pelo tempo parado e faça a movimentação sem perder o histórico.</p>
+        </div>
         {preSalesError ? (
           <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
             {preSalesError.message}

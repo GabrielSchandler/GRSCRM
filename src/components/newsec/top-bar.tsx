@@ -13,7 +13,7 @@ export function TopBar({
   links?: Array<{ href: string; label: string }>;
 }) {
   return (
-    <div className="flex items-center gap-2 border-b border-[var(--ns-border)] px-3 py-2 sm:gap-3 sm:px-4 sm:py-2.5">
+    <header className="flex min-h-[74px] items-center gap-2 border-b border-[var(--ns-border)] bg-[var(--ns-surface)] px-3 py-3 sm:gap-3 sm:px-6">
       <MenuMobile />
       {links.length > 0 && (
         <nav className="flex shrink-0 items-center gap-1">
@@ -21,7 +21,7 @@ export function TopBar({
             <Link
               key={link.href}
               href={link.href}
-              className="rounded-lg px-2.5 py-1.5 text-sm font-medium text-[var(--ns-text-secondary)] transition hover:bg-[var(--ns-surface-hover)] hover:text-[var(--ns-text)]"
+              className="rounded-[10px] px-2.5 py-1.5 text-sm font-medium text-[var(--ns-text-secondary)] transition hover:bg-[var(--ns-surface-hover)] hover:text-[var(--ns-text)]"
             >
               {link.label}
             </Link>
@@ -37,14 +37,14 @@ export function TopBar({
         <input
           type="search"
           placeholder="Buscar clientes, conversas, processos... (demonstração)"
-          className="w-full rounded-lg border border-[var(--ns-border)] bg-[var(--ns-surface)] py-2 pl-8 pr-3 text-sm text-[var(--ns-text)] outline-none placeholder:text-[var(--ns-text-secondary)] focus-visible:ring-2 focus-visible:ring-[var(--ns-primary)]"
+          className="w-full rounded-[10px] border border-[var(--ns-border)] bg-[var(--ns-surface-alt,var(--ns-surface-hover))] py-2.5 pl-8 pr-3 text-sm text-[var(--ns-text)] outline-none placeholder:text-[var(--ns-text-secondary)] focus-visible:ring-2 focus-visible:ring-[var(--ns-primary)]"
           disabled
         />
       </div>
       <div className="ml-auto flex items-center gap-2">
         <SinoNotificacoes />
         <ThemeToggle />
-        <div className="flex items-center gap-2 rounded-lg border border-[var(--ns-border)] px-2 py-1.5">
+        <div className="flex items-center gap-2 rounded-[10px] border border-[var(--ns-border)] px-2 py-1.5">
           <div className="flex h-6 w-6 items-center justify-center rounded-full bg-[var(--ns-primary)]/15 text-[10px] font-semibold text-[var(--ns-primary)]">
             VC
           </div>
@@ -54,6 +54,6 @@ export function TopBar({
           </div>
         </div>
       </div>
-    </div>
+    </header>
   );
 }

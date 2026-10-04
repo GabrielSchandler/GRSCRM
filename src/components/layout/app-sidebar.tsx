@@ -175,11 +175,10 @@ export async function AppSidebar() {
           <button
             type="submit"
             title="Sair"
-            className="inline-flex w-full min-w-0 items-center gap-3 overflow-hidden rounded-lg px-4 py-2.5 text-sm font-medium text-slate-600 transition hover:bg-slate-100 hover:text-slate-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600 focus-visible:ring-offset-2"
+            className="inline-flex w-full min-w-0 items-center gap-3 overflow-hidden rounded-[10px] px-4 py-2.5 text-sm font-medium text-[#C8D1E3] transition hover:bg-white/5 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#5267F5] focus-visible:ring-offset-2 focus-visible:ring-offset-[#10172F]"
           >
             <LogOut aria-hidden="true" className="h-4 w-4 shrink-0" />
-            {/* No menu do computador o texto só aparece ao abrir; no celular (menu aberto) aparece sempre. */}
-            <span className="whitespace-nowrap md:opacity-0 md:transition-opacity md:duration-150 md:group-hover/barra:opacity-100 md:group-focus-within/barra:opacity-100">Sair</span>
+            <span className="whitespace-nowrap">Sair</span>
           </button>
         </form>
       }

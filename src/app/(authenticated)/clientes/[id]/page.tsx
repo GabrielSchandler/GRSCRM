@@ -316,21 +316,44 @@ export default async function ClientePage({
   return (
     <>
       <PageHeader
-        title={client.full_name}
+        title="Cliente 360°"
         description={
           isDeletedClient(client)
             ? "Este cliente está excluído e não aparece na listagem padrão."
-            : "Dados cadastrados do cliente selecionado."
+            : "Dados, contrato, documentos, simulações e histórico no mesmo contexto."
         }
       />
       <div className="space-y-6 p-6">
         {successMessage ? <ClientToast message={successMessage} /> : null}
 
-        <div className="flex flex-wrap gap-3">
+        <section className="rounded-[12px] border border-[#DDE2EC] bg-white px-6 py-5">
+          <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex min-w-0 items-center gap-4">
+              <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-[#5267F5] text-base font-semibold text-white">
+                {client.full_name.slice(0, 2).toUpperCase()}
+              </span>
+              <div className="min-w-0">
+                <h1 className="truncate text-2xl font-semibold text-[#11182E]">{client.full_name}</h1>
+                <p className="mt-1 truncate text-sm text-[#69738A]">
+                  CPF {displayCpf(client.cpf)} · {displayPhone(client.phone_mobile)} · {displayValue(client.email)}
+                </p>
+                <div className="mt-3"><ClientStatusBadge client={client} /></div>
+              </div>
+            </div>
+            <div className="text-sm text-[#69738A] lg:text-right">
+              <p className="text-xs font-semibold uppercase tracking-wide">Consultor</p>
+              <p className="mt-1 font-semibold text-[#11182E]">
+                {displayValue(resolveUserDisplayName(commercialConsultantProfile, ""))}
+              </p>
+            </div>
+          </div>
+        </section>
+
+        <div className="flex flex-wrap justify-end gap-3">
           {isDeletedClient(client) ? null : (
             <Link
               href={`/clientes/${client.id}/editar`}
-              className="inline-flex items-center gap-2 rounded-lg bg-teal-700 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-teal-800"
+              className="inline-flex items-center gap-2 rounded-[10px] bg-[#5267F5] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#4053DE]"
             >
               <Edit className="h-4 w-4" />
               Editar
@@ -338,7 +361,7 @@ export default async function ClientePage({
           )}
           <Link
             href="/clientes"
-            className="rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+            className="rounded-[10px] border border-[#DDE2EC] bg-white px-4 py-2.5 text-sm font-semibold text-[#11182E] transition hover:bg-[#EEF1F8]"
           >
             Voltar para clientes
           </Link>
@@ -415,7 +438,8 @@ export default async function ClientePage({
           ]}
         >
           <ClientTabPanel id="resumo">
-            <section className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+            <section className="grid gap-4 xl:grid-cols-[minmax(0,1.55fr)_minmax(320px,0.75fr)]">
+              <div className="rounded-[12px] border border-[#DDE2EC] bg-white p-6 shadow-none">
               <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
                 <div>
                   <ClientStatusBadge client={client} />
@@ -433,7 +457,7 @@ export default async function ClientePage({
                 </div>
               </div>
 
-              <div className="mt-6 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+              <div className="mt-6 grid gap-3 md:grid-cols-2">
                 <SummaryMetric
                   label="CPF"
                   value={renderCopyableValue(
@@ -495,6 +519,21 @@ export default async function ClientePage({
                   {displayValue(client.notes)}
                 </p>
               </div>
+              </div>
+              <aside className="rounded-[12px] border border-[#DDE2EC] bg-white p-6 shadow-none">
+                <h2 className="text-lg font-semibold text-[#11182E]">Linha do tempo</h2>
+                <p className="mt-1 text-sm text-[#69738A]">Tudo que aconteceu com este cliente</p>
+                <div className="mt-5 space-y-4">
+                  {timelineEvents.slice(0, 5).map((event) => (
+                    <div key={event.id} className="border-l-2 border-[#C9D0FF] pl-4">
+                      <p className="text-xs font-semibold text-[#69738A]">{formatDateTime(event.created_at)}</p>
+                      <p className="mt-1 text-sm font-semibold text-[#11182E]">{event.title}</p>
+                      {event.note ? <p className="mt-1 text-sm text-[#69738A]">{event.note}</p> : null}
+                    </div>
+                  ))}
+                  {!timelineEvents.length ? <p className="text-sm text-[#69738A]">Nenhuma movimentação registrada.</p> : null}
+                </div>
+              </aside>
             </section>
           </ClientTabPanel>
 

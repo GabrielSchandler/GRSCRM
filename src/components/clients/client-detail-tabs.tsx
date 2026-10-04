@@ -42,11 +42,11 @@ export function ClientDetailTabs({ tabs, children }: ClientDetailTabsProps) {
 
   return (
     <div className="space-y-5">
-      <section className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
+      <section className="overflow-x-auto">
         <div
           role="tablist"
           aria-label="Seções do cadastro do cliente"
-          className="grid gap-2 sm:grid-cols-2 xl:grid-cols-6"
+          className="flex min-w-max gap-2"
         >
           {tabs.map((tab) => {
             const isActive = tab.id === selectedTab.id;
@@ -60,33 +60,22 @@ export function ClientDetailTabs({ tabs, children }: ClientDetailTabsProps) {
                 aria-controls={`client-tab-panel-${tab.id}`}
                 id={`client-tab-${tab.id}`}
                 onClick={() => selectTab(tab.id)}
-                className={`min-h-20 rounded-lg border px-4 py-3 text-left transition ${
+                className={`inline-flex items-center gap-2 rounded-[10px] border px-5 py-3 text-sm font-semibold transition ${
                   isActive
-                    ? "border-teal-600 bg-teal-700 text-white shadow-sm"
-                    : "border-slate-200 bg-slate-50 text-slate-700 hover:border-teal-200 hover:bg-teal-50"
+                    ? "border-[#5267F5] bg-[#5267F5] text-white"
+                    : "border-[#DDE2EC] bg-white text-[#11182E] hover:bg-[#EEF1F8]"
                 }`}
               >
-                <span className="flex items-center justify-between gap-3">
-                  <span className="text-sm font-semibold">{tab.label}</span>
-                  {typeof tab.count === "number" ? (
-                    <span
-                      className={`rounded-lg px-2 py-0.5 text-xs font-semibold ${
-                        isActive
-                          ? "bg-white/15 text-white"
-                          : "bg-white text-slate-600"
-                      }`}
-                    >
-                      {tab.count}
-                    </span>
-                  ) : null}
-                </span>
-                <span
-                  className={`mt-1 block text-xs leading-5 ${
-                    isActive ? "text-teal-50" : "text-slate-500"
-                  }`}
-                >
-                  {tab.description}
-                </span>
+                <span>{tab.label}</span>
+                {typeof tab.count === "number" ? (
+                  <span
+                    className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
+                      isActive ? "bg-white/20 text-white" : "bg-[#EEF0FF] text-[#5267F5]"
+                    }`}
+                  >
+                    {tab.count}
+                  </span>
+                ) : null}
               </button>
             );
           })}

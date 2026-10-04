@@ -310,30 +310,30 @@ function StatCard({
   icon: typeof Target;
 }) {
   const toneClass = {
-    default: "border-slate-200 bg-white text-slate-950",
-    success: "border-emerald-200 bg-emerald-50 text-emerald-950",
-    warning: "border-amber-200 bg-amber-50 text-amber-950",
-    danger: "border-red-200 bg-red-50 text-red-950",
+    default: "border-l-[#5267F5]",
+    success: "border-l-[#12A976]",
+    warning: "border-l-[#E7A11F]",
+    danger: "border-l-[#E24F63]",
   }[tone];
   const iconClass = {
-    default: "bg-slate-100 text-slate-700",
-    success: "bg-emerald-100 text-emerald-700",
-    warning: "bg-amber-100 text-amber-700",
-    danger: "bg-red-100 text-red-700",
+    default: "bg-[#EEF0FF] text-[#5267F5]",
+    success: "bg-[#E8F8F1] text-[#12A976]",
+    warning: "bg-[#FFF5DF] text-[#E7A11F]",
+    danger: "bg-[#FDECEF] text-[#E24F63]",
   }[tone];
 
   return (
-    <div className={`rounded-lg border p-5 shadow-sm ${toneClass}`}>
+    <div className={`rounded-[12px] border border-[#DDE2EC] border-l-4 bg-white p-5 shadow-none ${toneClass}`}>
       <div className="flex items-start justify-between gap-4">
         <div>
-          <p className="text-sm font-semibold text-slate-600">{label}</p>
-          <p className="mt-2 text-2xl font-semibold">{value}</p>
+          <p className="text-xs font-semibold uppercase tracking-wide text-[#69738A]">{label}</p>
+          <p className="mt-2 text-2xl font-semibold text-[#11182E]">{value}</p>
         </div>
         <span className={`rounded-lg p-2 ${iconClass}`}>
           <Icon className="h-5 w-5" aria-hidden="true" />
         </span>
       </div>
-      <p className="mt-3 text-sm leading-5 text-slate-600">{detail}</p>
+      <p className="mt-3 text-sm leading-5 text-[#69738A]">{detail}</p>
     </div>
   );
 }
@@ -348,21 +348,21 @@ function SegmentList({
   const maxValue = Math.max(...items.map((item) => item.value), 1);
 
   return (
-    <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-      <h2 className="text-base font-semibold text-slate-950">{title}</h2>
+    <section className="rounded-[12px] border border-[#DDE2EC] bg-white p-5 shadow-none">
+      <h2 className="text-base font-semibold text-[#11182E]">{title}</h2>
       <div className="mt-4 space-y-4">
         {items.length ? (
           items.map((item) => (
             <div key={item.label} className="space-y-2">
               <div className="flex items-center justify-between gap-3 text-sm">
-                <span className="font-medium text-slate-800">{item.label}</span>
-                <span className="text-slate-500">
+                <span className="font-medium text-[#11182E]">{item.label}</span>
+                <span className="text-[#69738A]">
                   {numberFormatter.format(item.count)} venda(s) | {formatCurrency(item.value)}
                 </span>
               </div>
-              <div className="h-2 rounded-lg bg-slate-100">
+              <div className="h-2 rounded-lg bg-[#EEF1F8]">
                 <div
-                  className="h-2 rounded-lg bg-teal-700"
+                  className="h-2 rounded-lg bg-[#5267F5]"
                   style={{ width: `${Math.max(6, (item.value / maxValue) * 100)}%` }}
                 />
               </div>
@@ -635,8 +635,8 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
   return (
     <>
       <PageHeader
-        title="Painel comercial"
-        description="Visão da gestão sobre pagamentos pagos no mês, meta, comissão e cobranças pendentes."
+        title="Início"
+        description="Seu dia, metas e prioridades em uma única visão."
       />
       <div className="space-y-6 p-6">
         {preSalesError ? (
@@ -649,16 +649,14 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
             {calculationsError.message}
           </div>
         ) : null}
-        <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+        <section className="rounded-[12px] border border-[#DDE2EC] bg-white p-5 shadow-none">
           <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
             <div>
-              <p className="text-sm font-semibold text-teal-700">{scopeLabel}</p>
-              <h2 className="mt-2 text-2xl font-semibold text-slate-950">
-                Comercial do mês atual
-              </h2>
-              <p className="mt-2 text-sm leading-6 text-slate-600">
-                Período analisado: {formatYmdDate(monthStartYmd)} ate {formatYmdDate(monthEndYmd)}.
-                Entram na venda total somente pagamentos pagos no período.
+              <h1 className="text-2xl font-semibold text-[#11182E]">
+                Bom dia, {scopeLabel === "Toda a equipe comercial" ? "equipe" : scopeLabel}
+              </h1>
+              <p className="mt-1 text-sm leading-6 text-[#69738A]">
+                Acompanhe as prioridades, a meta do mês e os pagamentos que exigem atenção hoje.
               </p>
             </div>
 
@@ -666,7 +664,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
               <select
                 name="consultant"
                 defaultValue={selectedConsultantId}
-                className="rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none transition focus:border-teal-600 focus:ring-2 focus:ring-teal-600/15"
+                className="rounded-[10px] border border-[#DDE2EC] bg-[#EEF1F8] px-3 py-2.5 text-sm text-[#11182E] outline-none transition focus:border-[#5267F5] focus:ring-2 focus:ring-[#5267F5]/15"
               >
                 <option value="">Todos os consultores</option>
                 {commercialConsultants.map((consultant) => (
@@ -678,31 +676,36 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
               </select>
               <button
                 type="submit"
-                className="rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                className="rounded-[10px] border border-[#DDE2EC] bg-white px-4 py-2.5 text-sm font-semibold text-[#11182E] transition hover:bg-[#EEF1F8]"
               >
                 Filtrar
               </button>
               <Link
                 href="/dashboard"
-                className="inline-flex items-center justify-center rounded-lg border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm font-semibold text-slate-600 transition hover:bg-slate-100"
+                className="inline-flex items-center justify-center rounded-[10px] border border-[#DDE2EC] bg-white px-4 py-2.5 text-sm font-semibold text-[#56627C] transition hover:bg-[#EEF1F8]"
               >
                 Limpar
               </Link>
             </form>
           </div>
 
-          <div className="mt-6">
+          <div className="mt-6 rounded-[10px] bg-[#F8F9FC] p-4">
             <div className="flex items-center justify-between gap-3 text-sm">
-              <span className="font-medium text-slate-700">Progresso da meta</span>
-              <span className="font-semibold text-slate-950">
+              <span className="font-semibold text-[#11182E]">Ritmo da meta</span>
+              <span className="font-semibold text-[#11182E]">
                 {percentFormatter.format(achievement)}%
               </span>
             </div>
-            <div className="mt-2 h-3 rounded-lg bg-slate-100">
+            <div className="mt-3 h-3 rounded-full bg-[#E8ECF5]">
               <div
-                className="h-3 rounded-lg bg-teal-700"
+                className="h-3 rounded-full bg-[#5267F5]"
                 style={{ width: `${Math.max(3, achievement)}%` }}
               />
+            </div>
+            <div className="mt-4 grid gap-3 text-sm sm:grid-cols-3">
+              <div><p className="text-xs font-semibold text-[#69738A]">Meta diária necessária</p><p className="mt-1 text-lg font-semibold text-[#11182E]">{formatCurrency(dailyGoal)}</p></div>
+              <div><p className="text-xs font-semibold text-[#69738A]">Dias úteis restantes</p><p className="mt-1 text-lg font-semibold text-[#11182E]">{remainingBusinessDays}</p></div>
+              <div><p className="text-xs font-semibold text-[#69738A]">Em aberto</p><p className="mt-1 text-lg font-semibold text-[#12A976]">{formatCurrency(pendingValue)}</p></div>
             </div>
           </div>
         </section>
@@ -710,29 +713,28 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
         <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <StatCard
             icon={Target}
-            label="Meta mês"
-            value={formatCurrency(monthlyGoal)}
-            detail="Soma das metas mensais dos consultores filtrados."
+            label="Vendas no mês"
+            value={formatCurrency(salesTotal)}
+            detail={`${percentFormatter.format(achievement)}% da meta mensal`}
           />
           <StatCard
             icon={CircleDollarSign}
-            label="Venda total"
-            value={formatCurrency(salesTotal)}
-            detail="Soma do campo Meta dos pagamentos pagos dentro do mês atual."
-            tone="success"
+            label="Meta"
+            value={formatCurrency(monthlyGoal)}
+            detail={`Faltam ${formatCurrency(remainingGoal)}`}
           />
           <StatCard
             icon={TrendingUp}
-            label="Restante pra meta"
-            value={formatCurrency(remainingGoal)}
-            detail={`${remainingBusinessDays} dia(s) útil(eis) restantes. Meta diaria: ${formatCurrency(dailyGoal)}.`}
-            tone={remainingGoal > 0 ? "warning" : "success"}
+            label="Conversão"
+            value={`${percentFormatter.format(achievement)}%`}
+            detail={`${numberFormatter.format(preSaleValues.length)} venda(s) aprovada(s)`}
+            tone="success"
           />
           <StatCard
             icon={Clock3}
-            label="Pagamentos pendentes"
+            label="Pendências"
             value={numberFormatter.format(pendingPayments.length)}
-            detail={`${formatCurrency(pendingValue)} em aberto. ${overduePayments.length} atrasado(s) e ${dueTodayPayments.length} vencendo hoje.`}
+            detail={`${dueTodayPayments.length} vencem hoje`}
             tone={overduePayments.length ? "danger" : pendingPayments.length ? "warning" : "success"}
           />
         </section>

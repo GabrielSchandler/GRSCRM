@@ -41,49 +41,52 @@ input:not(.ns-shell *) {
  * tenha escolhido claro explicitamente) ou por `data-theme="dark"` explicito.
  */
 .ns-shell {
-  --ns-bg: #f6f8fb;
-  --ns-surface: #ffffff;
-  --ns-surface-hover: #eef2f8;
-  --ns-text: #15243b;
-  --ns-text-secondary: #64748b;
-  --ns-border: #e2e8f0;
-  --ns-primary: #2563eb;
-  --ns-primary-foreground: #ffffff;
-  --ns-danger: #dc2626;
-  --ns-warning: #d97706;
-  --ns-success: #16a34a;
+  --ns-bg: #F4F6FB;
+  --ns-surface: #FFFFFF;
+  --ns-surface-alt: #EEF1F8;
+  --ns-surface-hover: #EEF1F8;
+  --ns-text: #11182E;
+  --ns-text-secondary: #69738A;
+  --ns-border: #DDE2EC;
+  --ns-primary: #5267F5;
+  --ns-primary-foreground: #FFFFFF;
+  --ns-danger: #E24F63;
+  --ns-warning: #E7A11F;
+  --ns-success: #12A976;
   color-scheme: light;
 }
 
 @media (prefers-color-scheme: dark) {
   .ns-shell:not([data-theme="light"]) {
-    --ns-bg: #0b1220;
-    --ns-surface: #111b2d;
-    --ns-surface-hover: #182640;
-    --ns-text: #e7eef8;
-    --ns-text-secondary: #9cacbf;
-    --ns-border: #26344b;
-    --ns-primary: #6094ff;
-    --ns-primary-foreground: #0b1220;
-    --ns-danger: #f87171;
-    --ns-warning: #fbbf24;
-    --ns-success: #4ade80;
+    --ns-bg: #0B1020;
+    --ns-surface: #12192B;
+    --ns-surface-alt: #182238;
+    --ns-surface-hover: #182238;
+    --ns-text: #F3F6FF;
+    --ns-text-secondary: #97A3B8;
+    --ns-border: #26314A;
+    --ns-primary: #7385FF;
+    --ns-primary-foreground: #FFFFFF;
+    --ns-danger: #FF7082;
+    --ns-warning: #F4B940;
+    --ns-success: #3DD6A0;
     color-scheme: dark;
   }
 }
 
 .ns-shell[data-theme="dark"] {
-  --ns-bg: #0b1220;
-  --ns-surface: #111b2d;
-  --ns-surface-hover: #182640;
-  --ns-text: #e7eef8;
-  --ns-text-secondary: #9cacbf;
-  --ns-border: #26344b;
-  --ns-primary: #6094ff;
-  --ns-primary-foreground: #0b1220;
-  --ns-danger: #f87171;
-  --ns-warning: #fbbf24;
-  --ns-success: #4ade80;
+  --ns-bg: #0B1020;
+  --ns-surface: #12192B;
+  --ns-surface-alt: #182238;
+  --ns-surface-hover: #182238;
+  --ns-text: #F3F6FF;
+  --ns-text-secondary: #97A3B8;
+  --ns-border: #26314A;
+  --ns-primary: #7385FF;
+  --ns-primary-foreground: #FFFFFF;
+  --ns-danger: #FF7082;
+  --ns-warning: #F4B940;
+  --ns-success: #3DD6A0;
   color-scheme: dark;
 }
 
@@ -105,7 +108,7 @@ input:not(.ns-shell *) {
   align-items: center;
   justify-content: center;
   gap: 0.5rem;
-  border-radius: 0.5rem;
+  border-radius: 0.625rem;
   padding: 0.625rem 1rem;
   font-size: 0.875rem;
   font-weight: 600;
@@ -126,7 +129,7 @@ input:not(.ns-shell *) {
   align-items: center;
   justify-content: center;
   gap: 0.5rem;
-  border-radius: 0.5rem;
+  border-radius: 0.625rem;
   padding: 0.625rem 1rem;
   font-size: 0.875rem;
   font-weight: 600;
@@ -148,7 +151,7 @@ input:not(.ns-shell *) {
   align-items: center;
   justify-content: center;
   gap: 0.5rem;
-  border-radius: 0.5rem;
+  border-radius: 0.625rem;
   padding: 0.625rem 1rem;
   font-size: 0.875rem;
   font-weight: 600;
@@ -169,7 +172,7 @@ input:not(.ns-shell *) {
   align-items: center;
   justify-content: center;
   gap: 0.5rem;
-  border-radius: 0.5rem;
+  border-radius: 0.625rem;
   padding: 0.625rem 1rem;
   font-size: 0.875rem;
   font-weight: 600;
@@ -193,7 +196,7 @@ input:not(.ns-shell *) {
 
 .ns-shell .ns-input {
   width: 100%;
-  border-radius: 0.5rem;
+  border-radius: 0.625rem;
   border: 1px solid var(--ns-border);
   background: var(--ns-surface);
   padding: 0.5rem 0.75rem;
@@ -227,4 +230,71 @@ input:not(.ns-shell *) {
   border-color: color-mix(in srgb, var(--ns-danger) 35%, transparent);
   background: color-mix(in srgb, var(--ns-danger) 12%, transparent);
   color: var(--ns-danger);
+}
+
+/*
+ * Camada de transicao para as rotas autenticadas historicas. Ela mantem a
+ * estrutura e os dados de cada modulo, mas substitui os utilitarios antigos
+ * de slate/teal pelo sistema visual Newsec enquanto cada fluxo recebe seu
+ * ajuste de composicao. A especificidade extra evita editar dezenas de telas
+ * apenas para trocar cores repetidas.
+ */
+.legacy-newsec {
+  color: #11182E;
+}
+.legacy-newsec .bg-white { background-color: #FFFFFF; }
+.legacy-newsec .bg-slate-50 { background-color: #F8F9FC; }
+.legacy-newsec .bg-slate-100 { background-color: #EEF1F8; }
+.legacy-newsec .bg-slate-200 { background-color: #DDE2EC; }
+.legacy-newsec .border-slate-100,
+.legacy-newsec .border-slate-200 { border-color: #DDE2EC; }
+.legacy-newsec .border-slate-300 { border-color: #C9D1E0; }
+.legacy-newsec .text-slate-950,
+.legacy-newsec .text-slate-900,
+.legacy-newsec .text-slate-800,
+.legacy-newsec .text-slate-700 { color: #11182E; }
+.legacy-newsec .text-slate-600 { color: #56627C; }
+.legacy-newsec .text-slate-500 { color: #69738A; }
+.legacy-newsec .text-slate-400 { color: #8A94A8; }
+.legacy-newsec .bg-teal-700 { background-color: #5267F5; }
+.legacy-newsec .bg-teal-50 { background-color: #EEF0FF; }
+.legacy-newsec .bg-teal-100 { background-color: #E4E8FF; }
+.legacy-newsec .border-teal-100,
+.legacy-newsec .border-teal-200,
+.legacy-newsec .border-teal-300 { border-color: #C9D0FF; }
+.legacy-newsec .border-teal-400 { border-color: #9EAAFF; }
+.legacy-newsec .text-teal-950,
+.legacy-newsec .text-teal-900,
+.legacy-newsec .text-teal-800,
+.legacy-newsec .text-teal-700 { color: #4053DE; }
+
+/* Densidade e acabamento consistentes para listas, formulários e quadros do CRM. */
+.legacy-newsec .rounded-lg { border-radius: 0.625rem; }
+.legacy-newsec .shadow-sm { box-shadow: none; }
+.legacy-newsec input,
+.legacy-newsec select,
+.legacy-newsec textarea {
+  border-color: #C9D1E0;
+  color: #11182E;
+}
+.legacy-newsec input::placeholder,
+.legacy-newsec textarea::placeholder { color: #8A94A8; }
+.legacy-newsec input:focus,
+.legacy-newsec select:focus,
+.legacy-newsec textarea:focus {
+  border-color: #5267F5;
+  outline: 0;
+  box-shadow: 0 0 0 2px rgb(82 103 245 / 15%);
+}
+.legacy-newsec table thead { background-color: #F8F9FC; }
+.legacy-newsec table tbody tr { border-color: #E7EAF1; }
+.legacy-newsec table tbody tr:hover { background-color: #F8F9FC; }
+.legacy-newsec .divide-slate-100 > :not(:last-child) { border-color: #E7EAF1; }
+.legacy-newsec .divide-slate-200 > :not(:last-child) { border-color: #DDE2EC; }
+.legacy-newsec button,
+.legacy-newsec a { -webkit-tap-highlight-color: transparent; }
+.legacy-newsec button:focus-visible,
+.legacy-newsec a:focus-visible {
+  outline: 2px solid #5267F5;
+  outline-offset: 2px;
 }

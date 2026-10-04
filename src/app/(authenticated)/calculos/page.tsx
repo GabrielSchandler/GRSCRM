@@ -10,13 +10,9 @@ import {
   formatCalculationDateTime,
   formatCpfDigits,
 } from "@/lib/calculations/formatters";
-import {
-  canManageCalculations,
-  listCalculationCreators,
-} from "@/lib/calculations/service";
+import { canManageCalculations } from "@/lib/calculations/service";
 import { onlyDigits } from "@/lib/clients/masks";
 import { listAccessiblePreSaleIdsForCurrentUser } from "@/lib/pre-sales/access";
-import { resolveUserDisplayName } from "@/lib/users/account";
 import { getHomeForRole } from "@/lib/workspace";
 import type { FinancingCalculation } from "@/types/calculation";
 
@@ -44,6 +40,11 @@ function successMessage(success?: string) {
   }
 
   return null;
+}
+
+function asNumber(value: number | string | null | undefined) {
+  const number = Number(value ?? 0);
+  return Number.isFinite(number) ? number : 0;
 }
 
 export default async function CalculosPage({ searchParams }: CalculosPageProps) {
@@ -103,22 +104,21 @@ export default async function CalculosPage({ searchParams }: CalculosPageProps) 
           : false),
     );
   }
-  const creators = await listCalculationCreators(
-    calculations.map((item) => item.created_by ?? ""),
-  );
-  const creatorMap = new Map(
-    creators.map((creator) => [
-      creator.id,
-      resolveUserDisplayName(creator, "Não informado"),
-    ]),
-  );
   const bannerMessage = successMessage(params.success);
+  const today = new Date().toISOString().slice(0, 10);
+  const createdToday = calculations.filter((calculation) => calculation.created_at.slice(0, 10) === today).length;
+  const pdfGenerated = calculations.filter((calculation) => Boolean(calculation.pdf_storage_path)).length;
+  const totalSavings = calculations.reduce(
+    (total, calculation) => total + asNumber(calculation.estimated_savings),
+    0,
+  );
+  const selectedCalculation = calculations[0] ?? null;
 
   return (
     <>
       <PageHeader
         title="Simulações"
-        description="Central de simulações revisionais com histórico, filtros e geração de PDF para o cliente."
+        description="Histórico e criação de análises revisionais sem perder contexto."
       />
       <div className="space-y-6 p-6">
         {bannerMessage ? (
@@ -127,7 +127,36 @@ export default async function CalculosPage({ searchParams }: CalculosPageProps) 
           </div>
         ) : null}
 
-        <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-end">
+          <div>
+            <h1 className="text-2xl font-semibold text-[#11182E]">Simulações</h1>
+            <p className="mt-1 text-sm text-[#69738A]">Encontre, compare, abra o PDF e crie uma nova análise com poucos cliques.</p>
+          </div>
+          <Link
+            href="/calculos/novo"
+            className="inline-flex w-fit items-center justify-center rounded-[10px] bg-[#5267F5] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#4053DE]"
+          >
+            Nova simulação
+          </Link>
+        </div>
+
+        <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          {[
+            { label: "Hoje", value: String(createdToday), detail: "simulações criadas", tone: "#5267F5" },
+            { label: "Economia média", value: formatCalculationCurrency(calculations.length ? totalSavings / calculations.length : 0), detail: "nas análises exibidas", tone: "#12A976" },
+            { label: "Em análise", value: String(calculations.filter((item) => !item.pdf_storage_path).length), detail: "aguardando PDF", tone: "#E7A11F" },
+            { label: "Total no período", value: String(calculations.length), detail: `${pdfGenerated} PDFs gerados`, tone: "#FF7A45" },
+          ].map((stat) => (
+            <article key={stat.label} className="relative overflow-hidden rounded-[12px] border border-[#DDE2EC] bg-white px-5 py-4">
+              <span className="absolute bottom-0 left-0 top-0 w-1" style={{ backgroundColor: stat.tone }} />
+              <p className="text-xs font-semibold uppercase text-[#69738A]">{stat.label}</p>
+              <p className="mt-2 text-2xl font-semibold text-[#11182E]">{stat.value}</p>
+              <p className="mt-1 text-sm text-[#69738A]">{stat.detail}</p>
+            </article>
+          ))}
+        </section>
+
+        <section className="rounded-[12px] border border-[#DDE2EC] bg-white p-4 shadow-none">
           <form className="grid gap-4 md:grid-cols-[2fr_1fr_1fr_1fr_auto] md:items-end">
             <div className="space-y-2">
               <label className="text-sm font-medium text-slate-700" htmlFor="q">
@@ -196,74 +225,52 @@ export default async function CalculosPage({ searchParams }: CalculosPageProps) 
           </form>
         </section>
 
-        <div className="flex justify-end">
-            <Link
-              href="/calculos/novo"
-              className="rounded-lg bg-teal-700 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-teal-800"
-            >
-            Nova simulação
-          </Link>
-        </div>
-
         {error ? (
           <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
             {error.message}
           </div>
         ) : (
-          <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+          <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
+          <section className="overflow-hidden rounded-[12px] border border-[#DDE2EC] bg-white shadow-none">
+            <div className="border-b border-[#DDE2EC] px-5 py-4">
+              <p className="text-sm font-semibold text-[#11182E]">{calculations.length} simulações</p>
+            </div>
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[1380px] border-collapse text-left text-sm">
-                <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+              <table className="w-full min-w-[1080px] border-collapse text-left text-sm">
+                <thead className="bg-[#F8F9FC] text-xs uppercase tracking-wide text-[#69738A]">
                   <tr>
                     <th className="px-4 py-3 font-semibold">Cliente</th>
-                    <th className="px-4 py-3 font-semibold">CPF</th>
                     <th className="px-4 py-3 font-semibold">Financeira</th>
                     <th className="px-4 py-3 font-semibold">Valor financiado</th>
-                    <th className="px-4 py-3 font-semibold">Valor da parcela</th>
-                    <th className="px-4 py-3 font-semibold">Parcelas</th>
                     <th className="px-4 py-3 font-semibold">Economia estimada</th>
                     <th className="px-4 py-3 font-semibold">Status</th>
                     <th className="px-4 py-3 font-semibold">Criado em</th>
-                    <th className="px-4 py-3 font-semibold">Criado por</th>
                     <th className="px-4 py-3 font-semibold">Ações</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {calculations.map((calculation) => (
-                    <tr key={calculation.id} className="align-top transition hover:bg-slate-50">
-                      <td className="px-4 py-3 font-medium text-slate-950">
+                    <tr key={calculation.id} className="align-top transition hover:bg-[#F8F9FC]">
+                      <td className="px-4 py-4 font-medium text-[#11182E]">
                         {calculation.client_name || "Não informado"}
+                        <p className="mt-1 text-xs font-normal text-[#69738A]">{formatCpfDigits(calculation.client_cpf)}</p>
                       </td>
-                      <td className="px-4 py-3 text-slate-700">
-                        {formatCpfDigits(calculation.client_cpf)}
-                      </td>
-                      <td className="px-4 py-3 text-slate-700">
+                      <td className="px-4 py-4 text-[#56627C]">
                         {calculation.financial_institution ?? "Não informado"}
                       </td>
-                      <td className="px-4 py-3 text-slate-700">
+                      <td className="px-4 py-4 text-[#11182E]">
                         {formatCalculationCurrency(calculation.financed_value)}
                       </td>
-                      <td className="px-4 py-3 text-slate-700">
-                        {formatCalculationCurrency(
-                          calculation.current_installment_value,
-                        )}
-                      </td>
-                      <td className="px-4 py-3 text-slate-700">
-                        {calculation.installment_count ?? "Não informado"}
-                      </td>
-                      <td className="px-4 py-3 text-slate-700">
+                      <td className="px-4 py-4 font-semibold text-[#12A976]">
                         {formatCalculationCurrency(calculation.estimated_savings)}
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="px-4 py-4">
                         <CalculationStatusBadge status={calculation.status} />
                       </td>
-                      <td className="px-4 py-3 text-slate-700">
+                      <td className="px-4 py-4 text-[#56627C]">
                         {formatCalculationDateTime(calculation.created_at)}
                       </td>
-                      <td className="px-4 py-3 text-slate-700">
-                        {creatorMap.get(calculation.created_by ?? "") ?? "Não informado"}
-                      </td>
-                      <td className="px-4 py-3">
+                      <td className="px-4 py-4">
                         <div className="space-y-3">
                           <div className="flex flex-wrap gap-2">
                             <Link
@@ -294,7 +301,7 @@ export default async function CalculosPage({ searchParams }: CalculosPageProps) 
                   ))}
                   {!calculations.length ? (
                     <tr>
-                      <td className="px-4 py-6 text-center text-slate-500" colSpan={11}>
+                      <td className="px-4 py-6 text-center text-[#69738A]" colSpan={7}>
                         Nenhuma simulação encontrada.
                       </td>
                     </tr>
@@ -303,6 +310,31 @@ export default async function CalculosPage({ searchParams }: CalculosPageProps) 
               </table>
             </div>
           </section>
+          <aside className="rounded-[12px] border border-[#DDE2EC] bg-white p-5">
+            {selectedCalculation ? (
+              <>
+                <div className="flex items-start justify-between gap-3 border-b border-[#DDE2EC] pb-4">
+                  <div>
+                    <h2 className="text-xl font-semibold text-[#11182E]">{selectedCalculation.client_name || "Simulação"}</h2>
+                    <p className="mt-1 text-sm text-[#69738A]">{selectedCalculation.financial_institution ?? "Financeira não informada"}</p>
+                  </div>
+                  <CalculationStatusBadge status={selectedCalculation.status} />
+                </div>
+                <h3 className="mt-5 text-sm font-semibold text-[#11182E]">Resumo da análise</h3>
+                <dl className="mt-4 space-y-4 text-sm">
+                  <div className="flex justify-between gap-3"><dt className="text-[#69738A]">Valor financiado</dt><dd className="font-semibold text-[#11182E]">{formatCalculationCurrency(selectedCalculation.financed_value)}</dd></div>
+                  <div className="flex justify-between gap-3"><dt className="text-[#69738A]">Parcela atual</dt><dd className="font-semibold text-[#11182E]">{formatCalculationCurrency(selectedCalculation.current_installment_value)}</dd></div>
+                  <div className="flex justify-between gap-3"><dt className="text-[#69738A]">Parcelas</dt><dd className="font-semibold text-[#11182E]">{selectedCalculation.installment_count ?? "-"}</dd></div>
+                  <div className="flex justify-between gap-3"><dt className="text-[#69738A]">Economia estimada</dt><dd className="font-semibold text-[#12A976]">{formatCalculationCurrency(selectedCalculation.estimated_savings)}</dd></div>
+                </dl>
+                <div className="mt-6 grid gap-2">
+                  <Link href={`/calculos/${selectedCalculation.id}`} className="inline-flex justify-center rounded-[10px] bg-[#5267F5] px-4 py-2.5 text-sm font-semibold text-white">Abrir análise completa</Link>
+                  <Link href={`/calculos/${selectedCalculation.id}/editar`} className="inline-flex justify-center rounded-[10px] border border-[#DDE2EC] px-4 py-2.5 text-sm font-semibold text-[#11182E]">Editar simulação</Link>
+                </div>
+              </>
+            ) : <p className="text-sm text-[#69738A]">Selecione ou crie uma simulação para ver os detalhes.</p>}
+          </aside>
+          </div>
         )}
       </div>
     </>

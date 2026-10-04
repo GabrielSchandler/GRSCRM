@@ -19,7 +19,17 @@ import {
   type PreSaleWithRelations,
 } from "@/types/pre-sale";
 import { updatePreSaleStatusAction } from "@/app/(authenticated)/pre-vendas/actions";
-import { PreSalesStatusBadge } from "./pre-sales-status-badge";
+
+const stageTone: Record<PreSaleStatus, { dot: string; chip: string }> = {
+  lead: { dot: "bg-[#5267F5]", chip: "bg-[#EEF0FF] text-[#5267F5]" },
+  pre_venda: { dot: "bg-[#7385FF]", chip: "bg-[#EEF0FF] text-[#5267F5]" },
+  em_contato: { dot: "bg-[#5267F5]", chip: "bg-[#EEF0FF] text-[#5267F5]" },
+  em_negociacao: { dot: "bg-[#FF7A45]", chip: "bg-[#FFF0E8] text-[#D75C2C]" },
+  aprovado: { dot: "bg-[#12A976]", chip: "bg-[#E8F8F1] text-[#0F9165]" },
+  perdido: { dot: "bg-[#E24F63]", chip: "bg-[#FDECEF] text-[#C6384D]" },
+  inativo: { dot: "bg-[#97A3B8]", chip: "bg-[#EEF1F8] text-[#69738A]" },
+  distrato: { dot: "bg-[#E24F63]", chip: "bg-[#FDECEF] text-[#C6384D]" },
+};
 
 type PreSalesKanbanProps = {
   preSales: PreSaleWithRelations[];
@@ -85,10 +95,10 @@ export function PreSalesKanban({ preSales, canDelete = false }: PreSalesKanbanPr
   }
 
   return (
-    <section className="space-y-3">
+    <section className="space-y-4">
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold text-slate-950">Pipeline</h2>
-        {isPending ? <p className="text-sm text-slate-500">Atualizando...</p> : null}
+        <p className="text-sm font-medium text-[#69738A]">Arraste os cards entre as etapas para atualizar o fluxo.</p>
+        {isPending ? <p className="text-sm text-[#69738A]">Atualizando...</p> : null}
       </div>
       {message ? (
         <div
@@ -101,7 +111,7 @@ export function PreSalesKanban({ preSales, canDelete = false }: PreSalesKanbanPr
           {message}
         </div>
       ) : null}
-      <div className="grid gap-4 overflow-x-auto lg:grid-cols-6">
+      <div className="grid min-w-[1080px] gap-3 overflow-x-auto xl:grid-cols-6">
         {(preSales.some((preSale) =>
           preSale.status === "inativo" || preSale.status === "distrato",
         )
@@ -127,15 +137,18 @@ export function PreSalesKanban({ preSales, canDelete = false }: PreSalesKanbanPr
                 }
               }}
               onDrop={() => handleDrop(status.value)}
-              className={`min-h-56 rounded-lg border p-3 transition ${
+              className={`flex min-h-[620px] flex-col rounded-[12px] border p-3 transition ${
                 dropTarget === status.value
-                  ? "border-teal-400 bg-teal-50/60 ring-2 ring-teal-200"
-                  : "border-slate-200 bg-slate-50"
+                  ? "border-[#9EAAFF] bg-[#EEF0FF] ring-2 ring-[#C9D0FF]"
+                  : "border-[#DDE2EC] bg-white"
               }`}
             >
-              <div className="mb-3 flex items-center justify-between">
-                <PreSalesStatusBadge status={status.value} />
-                <span className="text-xs font-semibold text-slate-500">
+              <div className="mb-3 flex items-center justify-between px-1">
+                <div className="flex items-center gap-2 text-sm font-semibold text-[#11182E]">
+                  <span className={`h-3 w-3 rounded-full ${stageTone[status.value].dot}`} />
+                  {status.label}
+                </div>
+                <span className="rounded-full bg-[#EEF0FF] px-3 py-1 text-xs font-semibold text-[#5267F5]">
                   {columnPreSales.length}
                 </span>
               </div>
@@ -149,40 +162,37 @@ export function PreSalesKanban({ preSales, canDelete = false }: PreSalesKanbanPr
                       setDraggedId(null);
                       setDropTarget(null);
                     }}
-                    className={`rounded-lg border bg-white p-3 shadow-sm transition ${
+                    className={`rounded-[10px] border bg-[#F4F6FB] p-4 shadow-none transition ${
                       draggedId === preSale.id
-                        ? "cursor-grabbing border-teal-300 opacity-70"
-                        : "cursor-grab border-slate-200"
+                        ? "cursor-grabbing border-[#9EAAFF] bg-white opacity-70"
+                        : "cursor-grab border-[#DDE2EC]"
                     }`}
                   >
                     <Link
                       href={`/pre-vendas/${preSale.id}`}
-                      className="text-sm font-semibold text-slate-950 hover:text-teal-700"
+                      className="text-sm font-semibold text-[#11182E] hover:text-[#4053DE]"
                     >
                       {preSale.client?.full_name ?? "Cliente não encontrado"}
                     </Link>
                     <PreSaleSearchMatchBadges matches={preSale.searchMatches} />
-                    <p className="mt-2 text-sm font-medium text-slate-700">
-                      {formatPreSaleType(preSale.pre_sale_type)}
+                    <p className="mt-1 text-xs font-medium text-[#69738A]">
+                      {formatPreSaleType(preSale.pre_sale_type)} · {preSale.service_type || "Sem origem"}
                     </p>
-                    <p className="mt-1 text-xs text-slate-500">
-                      {preSale.service_type || "Serviço não informado"}
-                    </p>
-                    <p className="mt-2 text-sm font-medium text-slate-700">
+                    <span className={`mt-3 inline-flex rounded-full px-3 py-1 text-xs font-semibold ${stageTone[status.value].chip}`}>
                       {formatCurrency(preSale.contract_value)}
+                    </span>
+                    <p className="mt-3 text-xs text-[#69738A]">
+                      Consultor: {formatUserName(preSale.consultant)}
                     </p>
-                    <p className="mt-1 text-xs text-slate-500">
-                      {formatUserName(preSale.consultant)}
-                    </p>
-                    <div className="mt-3 flex flex-wrap gap-2">
+                    <div className="mt-3 flex flex-wrap gap-2 border-t border-[#DDE2EC] pt-3">
                       <WhatsAppLink
                         phone={preSale.client?.phone_mobile ?? null}
                         label="WhatsApp"
-                        className="inline-flex items-center gap-1.5 rounded-lg border border-teal-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-teal-700 transition hover:bg-teal-50"
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-[#DDE2EC] bg-white px-2.5 py-1.5 text-xs font-semibold text-[#5267F5] transition hover:bg-[#EEF0FF]"
                       />
                       <Link
                         href={`/pre-vendas/${preSale.id}/editar`}
-                        className="rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
+                        className="rounded-lg border border-[#DDE2EC] bg-white px-2.5 py-1.5 text-xs font-semibold text-[#11182E] transition hover:bg-[#EEF1F8]"
                       >
                         Editar
                       </Link>

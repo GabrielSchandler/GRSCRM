@@ -55,6 +55,7 @@ type SidebarNavProps = {
   workspace: WorkspaceView;
   /** Menu do computador só com ícones: o nome aparece quando o menu abre (passar o mouse). */
   compacto?: boolean;
+  tone?: "light" | "dark";
 };
 
 const icons = {
@@ -93,6 +94,7 @@ export function SidebarNav({
   canManageTemplates,
   workspace,
   compacto = false,
+  tone = "light",
 }: SidebarNavProps) {
   const pathname = usePathname();
 
@@ -117,17 +119,21 @@ export function SidebarNav({
             aria-current={active ? "page" : undefined}
             onClick={persistWorkspacePreference}
             title={compacto ? item.label : undefined}
-            className={`inline-flex items-center gap-3 rounded-lg ${compacto ? "min-w-0 overflow-hidden px-4" : "px-3"} py-2.5 text-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600 focus-visible:ring-offset-2 ${
-              active
-                ? "bg-teal-50 text-teal-900"
-                : "text-slate-700 hover:bg-slate-100 hover:text-slate-950"
+            className={`inline-flex items-center gap-3 rounded-[10px] ${compacto ? "min-w-0 overflow-hidden px-4" : "px-3"} py-2.5 text-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#5267F5] focus-visible:ring-offset-2 ${
+              tone === "dark"
+                ? active
+                  ? "bg-[#5267F5] text-white focus-visible:ring-offset-[#10172F]"
+                  : "text-[#C8D1E3] hover:bg-white/5 hover:text-white focus-visible:ring-offset-[#10172F]"
+                : active
+                  ? "bg-[#E9ECFF] text-[#4053DE]"
+                  : "text-slate-700 hover:bg-[#EEF1F8] hover:text-[#11182E]"
             }`}
           >
             <Icon
               aria-hidden="true"
-              className={`h-4 w-4 shrink-0 ${active ? "text-teal-800" : "text-teal-700"}`}
+              className={`h-4 w-4 shrink-0 ${tone === "dark" ? "text-current" : active ? "text-[#4053DE]" : "text-[#69738A]"}`}
             />
-            {compacto ? <span className="min-w-0 truncate whitespace-nowrap opacity-0 transition-opacity duration-150 group-hover/barra:opacity-100 group-focus-within/barra:opacity-100">{item.label}</span> : item.label}
+            {compacto ? <span className="min-w-0 truncate whitespace-nowrap">{item.label}</span> : item.label}
           </Link>
         );
       })}

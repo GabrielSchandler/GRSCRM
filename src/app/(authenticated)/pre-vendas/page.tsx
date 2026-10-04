@@ -4,6 +4,7 @@ import { ClientToast } from "@/components/clients/client-toast";
 import { PageHeader } from "@/components/layout/page-header";
 import { PreSalesKanban } from "@/components/pre-sales/pre-sales-kanban";
 import { PreSalesList } from "@/components/pre-sales/pre-sales-list";
+import { PreSalesWorkspace } from "@/components/pre-sales/pre-sales-workspace";
 import { getCurrentUserContext } from "@/lib/auth/current-user";
 import { canAccessAllPreSales, canCreatePreSales } from "@/lib/pre-sales/access";
 import { getPreSaleSearchMatches } from "@/lib/pre-sales/search";
@@ -150,12 +151,30 @@ export default async function PreVendasPage({ searchParams }: PreVendasPageProps
   return (
     <>
       <PageHeader
-        title="Pré-vendas"
-        description="Acompanhe oportunidades comerciais em lista e pipeline."
+        title="Pipeline comercial"
+        description="Leads, pré-vendas e follow-ups no mesmo fluxo."
       />
       <div className="space-y-6 p-6">
         {successMessage ? <ClientToast message={successMessage} /> : null}
-        <div className="flex flex-col gap-4 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-end">
+          <div>
+            <h1 className="text-2xl font-semibold text-[#11182E]">Pipeline comercial</h1>
+            <p className="mt-1 text-sm text-[#69738A]">
+              Reduza cliques: filtre, mova, priorize e abra o cliente sem sair do quadro.
+            </p>
+          </div>
+          {canCreatePreSale ? (
+            <Link
+              href="/pre-vendas/novo"
+              className="inline-flex items-center justify-center gap-2 rounded-[10px] bg-[#5267F5] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#4053DE]"
+            >
+              <Plus className="h-4 w-4" />
+              Nova pré-venda
+            </Link>
+          ) : null}
+        </div>
+
+        <div className="flex flex-col gap-4 rounded-[12px] border border-[#DDE2EC] bg-white p-4 shadow-none">
           <form
             className={`grid gap-3 ${
               canFilterCommercialConsultant
@@ -174,14 +193,14 @@ export default async function PreVendasPage({ searchParams }: PreVendasPageProps
                 name="q"
                 defaultValue={searchTerm}
                 placeholder="Buscar por nome ou CPF do cliente/financiado"
-                className="w-full rounded-lg border border-slate-300 bg-white py-2.5 pl-9 pr-3 text-sm outline-none transition focus:border-teal-600 focus:ring-2 focus:ring-teal-600/15"
+                className="w-full rounded-[10px] border border-[#C9D1E0] bg-[#EEF1F8] py-2.5 pl-9 pr-3 text-sm outline-none transition focus:border-[#5267F5] focus:ring-2 focus:ring-[#5267F5]/15"
               />
             </label>
             {canFilterCommercialConsultant ? (
               <select
                 name="consultant"
                 defaultValue={selectedConsultantId}
-                className="rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none transition focus:border-teal-600 focus:ring-2 focus:ring-teal-600/15"
+                className="rounded-[10px] border border-[#DDE2EC] bg-[#EEF1F8] px-3 py-2.5 text-sm outline-none transition focus:border-[#5267F5] focus:ring-2 focus:ring-[#5267F5]/15"
               >
                 <option value="">Todos os consultores comerciais</option>
                 {commercialConsultants.map((consultant) => (
@@ -193,30 +212,19 @@ export default async function PreVendasPage({ searchParams }: PreVendasPageProps
             ) : null}
             <button
               type="submit"
-              className="rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+              className="rounded-[10px] border border-[#DDE2EC] bg-white px-4 py-2.5 text-sm font-semibold text-[#11182E] transition hover:bg-[#EEF1F8]"
             >
               Filtrar
             </button>
             {searchTerm || selectedConsultantId ? (
               <Link
                 href="/pre-vendas"
-                className="inline-flex items-center justify-center rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                className="inline-flex items-center justify-center rounded-[10px] border border-[#DDE2EC] bg-white px-4 py-2.5 text-sm font-semibold text-[#11182E] transition hover:bg-[#EEF1F8]"
               >
                 Limpar
               </Link>
             ) : null}
           </form>
-          {canCreatePreSale ? (
-            <div>
-              <Link
-                href="/pre-vendas/novo"
-                className="inline-flex items-center justify-center gap-2 rounded-lg bg-teal-700 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-teal-800"
-              >
-                <Plus className="h-4 w-4" />
-                Nova pré-venda
-              </Link>
-            </div>
-          ) : null}
         </div>
 
         {error ? (
@@ -225,11 +233,10 @@ export default async function PreVendasPage({ searchParams }: PreVendasPageProps
           </div>
         ) : (
           <>
-            <PreSalesKanban
-              preSales={preSales}
-              canDelete={canDeletePreSales}
+            <PreSalesWorkspace
+              board={<PreSalesKanban preSales={preSales} canDelete={canDeletePreSales} />}
+              list={<PreSalesList preSales={preSales} canDelete={canDeletePreSales} />}
             />
-            <PreSalesList preSales={preSales} canDelete={canDeletePreSales} />
           </>
         )}
       </div>

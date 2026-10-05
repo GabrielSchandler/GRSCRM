@@ -11,6 +11,9 @@ import { redirect } from "next/navigation";
 import { PageHeader } from "@/components/layout/page-header";
 import { getCurrentUserContext } from "@/lib/auth/current-user";
 import { resolveUserDisplayName } from "@/lib/users/account";
+import { FinanceOverview } from "@/components/finance/finance-overview";
+import { FinanceNavigation } from "@/components/finance/finance-navigation";
+import { financeToday } from "@/lib/finance/overview";
 import {
   createFinanceChargebackAction,
   createFinanceSaleAction,
@@ -45,6 +48,7 @@ type FinancePageProps = {
     editTransaction?: string;
     editSale?: string;
     editChargeback?: string;
+    view?: string;
   }>;
 };
 
@@ -261,6 +265,19 @@ export default async function FinanceiroPage({ searchParams }: FinancePageProps)
     redirect("/areas");
   }
 
+  // Supabase caps each response; paginate instead of presenting a partial cash-flow total.
+  async function loadFinancialRows<T>(table: "finance_transactions" | "finance_sales", dateColumn: string) {
+    const rows: T[] = [];
+    for (let offset = 0; ;) {
+      const result = await supabase.from(table).select("*", { count: "exact" }).eq("company_id", companyId)
+        .order(dateColumn, { ascending: false }).order("id", { ascending: false }).range(offset, offset + 999);
+      if (result.error) return { data: null, error: result.error };
+      rows.push(...result.data as T[]);
+      offset += result.data.length;
+      if (result.data.length === 0 || offset >= (result.count ?? offset)) return { data: rows, error: null };
+    }
+  }
+
   const [
     categoriesResult,
     accountsResult,
@@ -281,18 +298,8 @@ export default async function FinanceiroPage({ searchParams }: FinancePageProps)
       .select("id, company_id, name, account_type, is_active")
       .eq("company_id", companyId)
       .order("name", { ascending: true }),
-    supabase
-      .from("finance_transactions")
-      .select("*")
-      .eq("company_id", companyId)
-      .order("due_date", { ascending: false })
-      .limit(5000),
-    supabase
-      .from("finance_sales")
-      .select("*")
-      .eq("company_id", companyId)
-      .order("sale_date", { ascending: false })
-      .limit(5000),
+    loadFinancialRows<FinanceTransaction>("finance_transactions", "due_date"),
+    loadFinancialRows<FinanceSale>("finance_sales", "sale_date"),
     supabase
       .from("finance_chargebacks")
       .select("*")
@@ -345,13 +352,28 @@ export default async function FinanceiroPage({ searchParams }: FinancePageProps)
   const editingSale = sales.find((item) => item.id === params.editSale);
   const editingChargeback = chargebacks.find((item) => item.id === params.editChargeback);
 
+  if (params.view !== "launches" && !params.editTransaction && !params.editSale && !params.editChargeback) {
+    return <>
+      <PageHeader title="Financeiro" description="Controle de entradas, saídas, recebíveis, premiações e fluxo de caixa." />
+      <FinanceNavigation active="overview" />
+      {(params.success || params.error || firstError || usersResult.error) && <div className="finance-workspace space-y-3 px-4 pt-4 sm:px-6">
+        {params.success && <MessageBox type="success" message={params.success} />}
+        {params.error && <MessageBox type="error" message={params.error} />}
+        {(firstError || usersResult.error) && <MessageBox type="error" message="Não foi possível carregar todos os dados financeiros. Confira a conexão e a configuração do módulo." />}
+      </div>}
+      <FinanceOverview transactions={transactions} sales={sales} categories={categories} accounts={accounts} users={allUsers} auditLogs={auditLogs}
+        today={financeToday()} transactionError={Boolean(transactionsResult.error)} salesError={Boolean(salesResult.error)} />
+    </>;
+  }
+
   return (
     <>
       <PageHeader
         title="Financeiro"
         description="Controle manual e importado das vendas, despesas, recebimentos e chargebacks da empresa."
       />
-      <div className="space-y-6 p-6">
+      <FinanceNavigation active="launches" />
+      <div className="finance-workspace space-y-6 p-6">
         {params.success ? <MessageBox type="success" message={params.success} /> : null}
         {params.error ? <MessageBox type="error" message={params.error} /> : null}
         {firstError ? (

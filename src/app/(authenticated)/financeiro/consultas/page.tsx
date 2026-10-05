@@ -9,6 +9,7 @@ import {
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { PageHeader } from "@/components/layout/page-header";
+import { FinanceNavigation } from "@/components/finance/finance-navigation";
 import { getCurrentUserContext } from "@/lib/auth/current-user";
 import { resolveUserDisplayName } from "@/lib/users/account";
 import {
@@ -464,7 +465,8 @@ export default async function ConsultaFinanceiraPage({
         title="Consultas financeiras"
         description="Análise vendas por meta, comissoes, caixa financeiro e registros filtrados."
       />
-      <div className="space-y-6 p-6">
+      <FinanceNavigation active={params.tipo === "vendas" ? "commissions" : "queries"} />
+      <div className="finance-workspace space-y-6 p-6">
         {params.success ? (
           <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
             {params.success}

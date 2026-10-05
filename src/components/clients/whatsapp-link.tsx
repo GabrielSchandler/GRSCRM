@@ -1,5 +1,6 @@
+import Link from "next/link";
 import { MessageCircle } from "lucide-react";
-import { getWhatsAppUrl } from "@/lib/clients/masks";
+import { onlyDigits } from "@/lib/clients/masks";
 
 type WhatsAppLinkProps = {
   phone: string | null;
@@ -8,17 +9,16 @@ type WhatsAppLinkProps = {
 };
 
 export function WhatsAppLink({ phone, label = "WhatsApp", className }: WhatsAppLinkProps) {
-  const href = getWhatsAppUrl(phone);
+  const telefone = onlyDigits(phone);
 
-  if (!href) {
+  if (!telefone) {
     return null;
   }
 
   return (
-    <a
-      href={href}
-      target="_blank"
-      rel="noreferrer"
+    <Link
+      href={`/atendimento?telefone=${encodeURIComponent(telefone)}`}
+      title="Abrir a conversa deste cliente no Atendimento"
       className={
         className ??
         "inline-flex items-center gap-2 rounded-lg border border-teal-200 bg-white px-4 py-2.5 text-sm font-semibold text-teal-700 transition hover:bg-teal-50"
@@ -26,6 +26,6 @@ export function WhatsAppLink({ phone, label = "WhatsApp", className }: WhatsAppL
     >
       <MessageCircle className="h-4 w-4" />
       {label}
-    </a>
+    </Link>
   );
 }

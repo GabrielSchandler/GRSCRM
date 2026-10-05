@@ -29,7 +29,11 @@ export function ThemeToggle() {
     } else if (current === "light") {
       setIsDark(false);
     } else {
-      setIsDark(window.matchMedia("(prefers-color-scheme: dark)").matches);
+      let stored: string | null = null;
+      try { stored = localStorage.getItem(STORAGE_KEY); } catch { /* Browser storage may be unavailable. */ }
+      const dark = stored === "dark" || (stored !== "light" && window.matchMedia("(prefers-color-scheme: dark)").matches);
+      applyTheme(dark ? "dark" : "light");
+      setIsDark(dark);
     }
   }, []);
 

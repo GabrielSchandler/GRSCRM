@@ -154,11 +154,11 @@ export default async function PreVendasPage({ searchParams }: PreVendasPageProps
         title="Pipeline comercial"
         description="Leads, pré-vendas e follow-ups no mesmo fluxo."
       />
-      <div className="space-y-6 p-6">
+      <div className="pre-sales-page min-w-0 space-y-6 p-6">
         {successMessage ? <ClientToast message={successMessage} /> : null}
         <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-end">
           <div>
-            <h1 className="text-2xl font-semibold text-[#11182E]">Pipeline comercial</h1>
+            <h1 className="text-2xl font-semibold text-[var(--ns-text)]">Pipeline comercial</h1>
             <p className="mt-1 text-sm text-[#69738A]">
               Reduza cliques: filtre, mova, priorize e abra o cliente sem sair do quadro.
             </p>

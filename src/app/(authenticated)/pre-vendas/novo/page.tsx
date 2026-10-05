@@ -41,7 +41,7 @@ export default async function NovaPreVendaPage() {
         description="Crie uma oportunidade vinculada a um cliente e consultor da empresa."
       />
       <div className="p-6">
-        <div className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+        <div>
           <PreSalesForm
             clients={(clientsData ?? []) as ClientOption[]}
             consultants={consultants}

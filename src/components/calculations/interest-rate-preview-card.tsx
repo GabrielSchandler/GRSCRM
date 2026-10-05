@@ -57,33 +57,33 @@ export function InterestRatePreviewCard({
   return (
     <section
       aria-labelledby="interest-rate-preview-title"
-      className="overflow-hidden rounded-lg border border-teal-200 bg-white shadow-sm"
+      className="interest-rate-preview overflow-hidden rounded-lg border border-[var(--ns-border)] bg-[var(--ns-surface)]"
     >
-      <div className="flex flex-col gap-3 border-b border-teal-100 bg-teal-50 px-5 py-4 sm:flex-row sm:items-start sm:justify-between">
+      <div className="flex flex-col gap-3 border-b border-[var(--ns-border)] bg-[var(--ns-surface-hover)] px-5 py-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="flex gap-3">
-          <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-teal-700 text-white">
+          <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-[var(--ns-primary)] text-white">
             <Calculator aria-hidden="true" size={20} />
           </span>
           <div>
             <h2
               id="interest-rate-preview-title"
-              className="text-base font-semibold text-slate-950"
+              className="text-base font-semibold text-[var(--ns-text)]"
             >
               Prévia das taxas de juros
             </h2>
-            <p className="mt-1 text-sm text-slate-600">
+            <p className="mt-1 text-sm text-[var(--ns-text-secondary)]">
               Compare o contrato atual com a redução escolhida antes de salvar.
             </p>
           </div>
         </div>
-        <span className="w-fit rounded-full border border-teal-300 bg-white px-3 py-1 text-xs font-semibold text-teal-800">
+        <span className="w-fit rounded-full border border-[var(--ns-border)] bg-[var(--ns-surface)] px-3 py-1 text-xs font-semibold text-[var(--ns-primary)]">
           Atualização automática
         </span>
       </div>
 
       {comparison ? (
         <div className="space-y-5 p-5">
-          <dl className="grid grid-cols-2 border-y border-slate-200 bg-slate-50/70 sm:grid-cols-4">
+          <dl className="grid grid-cols-2 border-y border-[var(--ns-border)] bg-[var(--ns-surface-hover)]">
             <div className="min-w-0 border-b border-r border-slate-200 px-3 py-3 sm:border-b-0">
               <dt className="text-xs font-medium text-slate-500">Parcela atual</dt>
               <dd className="mt-1 break-words text-base font-bold text-slate-950">

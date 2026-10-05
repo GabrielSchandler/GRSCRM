@@ -16,6 +16,7 @@ import {
 import { formatCpf, formatPhone, onlyDigits } from "@/lib/clients/masks";
 import { FormFieldLabel } from "@/components/form-field-label";
 import { InterestRatePreviewCard } from "@/components/calculations/interest-rate-preview-card";
+import { CalculationResultPreview } from "@/components/calculations/calculation-result-preview";
 import { TotalkCalculationImportPanel } from "@/components/calculations/totalk-calculation-import-panel";
 import {
   financingCalculationDefaultValues,
@@ -395,7 +396,7 @@ export function CalculationForm({
 
   return (
     <form
-      className="space-y-8"
+      className="calculation-edit-form grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_380px]"
       onSubmit={handleSubmit(onValidSubmit)}
       onKeyDownCapture={handleEnterAsNextField}
     >
@@ -403,11 +404,16 @@ export function CalculationForm({
       <input type="hidden" {...register("situation")} />
       <input type="hidden" {...register("attendance_date")} />
 
+      <div className="min-w-0 space-y-5">
+      <div className="border-b border-[var(--ns-border)] pb-3"><h2 className="text-lg font-semibold">Dados do financiamento</h2></div>
+      <details className="rounded-lg border border-[var(--ns-border)] bg-[var(--ns-surface)] p-4">
+      <summary className="cursor-pointer text-sm font-semibold">Importar dados da Totalk</summary>
       <TotalkCalculationImportPanel
         disabled={disabled}
         currentPhone={clientPhone ?? ""}
         onApply={applyTotalkImportedFields}
       />
+      </details>
 
       <section className="grid gap-5 rounded-lg border border-slate-200 bg-white p-5 shadow-sm md:grid-cols-2">
         <div className="space-y-2">
@@ -1015,13 +1021,6 @@ export function CalculationForm({
         </div>
       </section>
 
-      <InterestRatePreviewCard
-        financedValue={computedFinancedValue}
-        installmentCount={installmentCount}
-        currentInstallmentValue={currentInstallmentValue}
-        reductionPercentage={installmentReductionPercentage}
-      />
-
       <CalculationActionMessage state={actionState} />
 
       <div className="flex flex-wrap items-center gap-3">
@@ -1046,6 +1045,20 @@ export function CalculationForm({
           Lista de simulações
         </Link>
       </div>
+      </div>
+      <aside className="min-w-0 space-y-4 xl:sticky xl:top-4 xl:max-h-[calc(100dvh-2rem)] xl:overflow-y-auto">
+        <CalculationResultPreview values={watch()} />
+        <details className="calculation-rate-details rounded-lg border border-[var(--ns-border)] bg-[var(--ns-surface)] p-4">
+          <summary className="cursor-pointer text-sm font-semibold">Taxas de juros e limites</summary>
+          <InterestRatePreviewCard
+            financedValue={computedFinancedValue}
+            installmentCount={installmentCount}
+            currentInstallmentValue={currentInstallmentValue}
+            reductionPercentage={installmentReductionPercentage}
+          />
+        </details>
+        <button type="submit" disabled={disabled} className="w-full rounded-lg bg-[var(--ns-primary)] px-4 py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60">{disabled ? "Salvando..." : submitLabel}</button>
+      </aside>
     </form>
   );
 }

@@ -1,6 +1,6 @@
 import { Plus } from "lucide-react";
 import Link from "next/link";
-import { ClientList } from "@/components/clients/client-list";
+import { ClientsWorkspace } from "@/components/clients/clients-workspace";
 import { ClientPagination } from "@/components/clients/client-pagination";
 import { ClientSearch } from "@/components/clients/client-search";
 import { ClientToast } from "@/components/clients/client-toast";
@@ -49,7 +49,7 @@ export default async function ClientesPage({ searchParams }: ClientesPageProps) 
 
   let query = supabase
     .from("clients")
-    .select("id, full_name, cpf, phone_mobile, city, state, created_at, deleted_at", {
+    .select("id, full_name, cpf, phone_mobile, email, commercial_consultant_user_id, city, state, created_at, deleted_at", {
       count: "exact",
     })
     .eq("company_id", companyId);
@@ -61,7 +61,7 @@ export default async function ClientesPage({ searchParams }: ClientesPageProps) 
   }
 
   if (search) {
-    const filters = [`full_name.ilike.%${search}%`, `cpf.ilike.%${search}%`];
+    const filters = [`full_name.ilike.%${search}%`, `cpf.ilike.%${search}%`, `email.ilike.%${search}%`];
 
     if (cpfSearch) {
       filters.push(`cpf.ilike.%${cpfSearch}%`);
@@ -120,16 +120,35 @@ export default async function ClientesPage({ searchParams }: ClientesPageProps) 
     .range(offset, offset + pageSize - 1)
     .returns<ClientListItem[]>();
 
+  const ids = (data ?? []).map((client) => client.id);
+  const [salesResult, documentsResult, calculationsResult, usersResult] = ids.length ? await Promise.all([
+    supabase.from("pre_sales").select("id, client_id, status, pre_sale_type, media, created_at, updated_at").eq("company_id", companyId).in("client_id", ids).order("created_at", { ascending: false }),
+    supabase.from("client_documents").select("id, client_id, title, created_at").eq("company_id", companyId).in("client_id", ids).is("deleted_at", null),
+    supabase.from("financing_calculations").select("id, client_id, financial_institution, estimated_savings, installment_reduction_percentage, created_at").eq("company_id", companyId).in("client_id", ids).order("created_at", { ascending: false }),
+    supabase.from("user_profiles").select("id, full_name").eq("company_id", companyId),
+  ]) : [];
+  const previews = (data ?? []).map((client) => {
+    const extra = client as ClientListItem & { email: string | null; commercial_consultant_user_id: string | null };
+    return {
+      ...client,
+      email: extra.email,
+      consultant: usersResult?.data?.find((user) => user.id === extra.commercial_consultant_user_id)?.full_name ?? null,
+      sale: salesResult?.data?.find((sale) => sale.client_id === client.id) ?? null,
+      documents: documentsResult?.data?.filter((document) => document.client_id === client.id) ?? [],
+      calculation: calculationsResult?.data?.find((calculation) => calculation.client_id === client.id) ?? null,
+    };
+  });
+
   return (
     <>
       <PageHeader
         title="Clientes"
-        description="Gerencie os clientes da empresa autenticada com busca, cadastro e edição."
+        description="Centralize sua base de clientes e acelere o acompanhamento comercial."
       />
-      <div className="space-y-6 p-6">
+      <div className="clients-page space-y-4 p-4 lg:p-6">
         {successMessage ? <ClientToast message={successMessage} /> : null}
 
-        <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
+        <div className="flex flex-col justify-between gap-3 xl:flex-row xl:items-start">
           <ClientSearch
             defaultValues={{
               q: search,
@@ -155,20 +174,8 @@ export default async function ClientesPage({ searchParams }: ClientesPageProps) 
           <StatusMessage type="error">{error.message}</StatusMessage>
         ) : (
           <>
-            <ClientList
-              clients={data ?? []}
-              sort={sort}
-              searchParams={{
-                q: search,
-                phone: params.phone,
-                status,
-                city: params.city,
-                state: params.state,
-                hasEmail,
-                pageSize: String(pageSize),
-              }}
-            />
-            <ClientPagination
+            <ClientsWorkspace clients={previews} total={count ?? 0}>
+              <ClientPagination
               page={page}
               pageSize={pageSize}
               total={count ?? 0}
@@ -183,6 +190,7 @@ export default async function ClientesPage({ searchParams }: ClientesPageProps) 
                 pageSize: String(pageSize),
               }}
             />
+            </ClientsWorkspace>
           </>
         )}
       </div>

@@ -249,6 +249,7 @@ export function AtendimentoWorkspaceReal({
   areaJuridica?: boolean;
 }) {
   const supabase = useMemo(() => createClient(), []);
+  const searchParams = useSearchParams();
   // A aba "IA" (conversas sem responsável, só a IA atendendo) é visível pra quem supervisiona —
   // mesmo corte de "isAdminOuManager" usado no resto da tela pra "ver toda a empresa".
   const podeVerIA = isAdminOuManager || isPlatformOwner;
@@ -300,6 +301,7 @@ export function AtendimentoWorkspaceReal({
   const [enviando, setEnviando] = useState(false);
   const [contatosNovos, setContatosNovos] = useState<Set<string>>(new Set());
   const [novaConversaAberta, setNovaConversaAberta] = useState(false);
+  const [telefoneNovaConversa, setTelefoneNovaConversa] = useState("");
   const [arrastandoArquivo, setArrastandoArquivo] = useState(false);
   // Áudio gravado no navegador e arquivos (foto/vídeo/documento) pro cliente.
   const [gravandoDesde, setGravandoDesde] = useState<number | null>(null);
@@ -882,7 +884,8 @@ export function AtendimentoWorkspaceReal({
 
   // Clique num aviso (/atendimento?c=<id>): abre aquela conversa, mesmo que não esteja na lista carregada.
   // Conta como "o dono abriu" — a pessoa clicou pra ver.
-  const conversaPedidaNaUrl = useSearchParams().get("c");
+  const conversaPedidaNaUrl = searchParams.get("c");
+  const telefonePedidoNaUrl = searchParams.get("telefone");
   async function abrirConversaPorId(id: string, deveContinuar: () => boolean = () => true) {
     const { data } = await supabase
       .from("conversations")
@@ -910,6 +913,63 @@ export function AtendimentoWorkspaceReal({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [conversaPedidaNaUrl]);
+
+  // Links vindos de Cliente e Pré-venda chegam pelo telefone. Resolve a conversa no próprio CRM
+  // e mantém o WhatsApp externo fora desse fluxo; quando não existe histórico, abre o formulário
+  // de nova conversa com o telefone preenchido para a pessoa confirmar o envio conscientemente.
+  useEffect(() => {
+    const digitos = telefonePedidoNaUrl?.replace(/\D/g, "") ?? "";
+    if (digitos.length < 8) return;
+
+    let cancelado = false;
+    void (async () => {
+      const { data: telefones } = await supabase
+        .from("contact_phone_numbers")
+        .select("contact_id")
+        .eq("company_id", companyId)
+        .ilike("phone_e164", `%${digitos}%`)
+        .limit(20);
+      if (cancelado) return;
+      if (!telefones?.length) {
+        setTelefoneNovaConversa(digitos);
+        setNovaConversaAberta(true);
+        return;
+      }
+
+      const contatoIds = [...new Set(telefones.map((telefone) => telefone.contact_id))];
+      const { data } = await supabase
+        .from("conversations")
+        .select(SELECT_CONVERSAS)
+        .eq("company_id", companyId)
+        .in("contact_id", contatoIds)
+        .eq("ultima_mensagem.is_internal_note", false)
+        .order("created_at", { referencedTable: "ultima_mensagem", ascending: false })
+        .limit(1, { referencedTable: "ultima_mensagem" })
+        .order("last_activity_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (cancelado) return;
+      if (!data) {
+        setTelefoneNovaConversa(digitos);
+        setNovaConversaAberta(true);
+        return;
+      }
+
+      const conversa = data as unknown as ConversaLista;
+      setConversaFixada(conversa);
+      abrirConversa(conversa);
+    })().finally(() => {
+      if (cancelado) return;
+      const url = new URL(window.location.href);
+      url.searchParams.delete("telefone");
+      window.history.replaceState(window.history.state, "", url.pathname + url.search + url.hash);
+    });
+    return () => {
+      cancelado = true;
+    };
+    // `abrirConversa` só usa setters e a identidade dele não precisa disparar nova busca.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [telefonePedidoNaUrl, companyId, supabase]);
   // Conversa do Totalk (canal sem WhatsApp ligado ao CRM): o envio é bloqueado no servidor; a tela já
   // deixa só "Nota interna", pra ninguém digitar uma resposta e só depois descobrir que não sai.
   const semWhatsApp = conversaSelecionada ? conversaSelecionada.channel?.provider !== "evolution" : false;
@@ -1981,6 +2041,7 @@ export function AtendimentoWorkspaceReal({
         <ModalNovaConversa
           supabase={supabase}
           companyId={companyId}
+          telefoneInicial={telefoneNovaConversa}
           onFechar={() => setNovaConversaAberta(false)}
           onCriada={async (conversationId, mensagem) => {
             setNovaConversaAberta(false);
@@ -2128,17 +2189,19 @@ function LinhaFicha({ rotulo, valor }: { rotulo: string; valor: React.ReactNode 
 function ModalNovaConversa({
   supabase,
   companyId,
+  telefoneInicial = "",
   onFechar,
   onCriada,
 }: {
   supabase: ReturnType<typeof createClient>;
   companyId: string;
+  telefoneInicial?: string;
   onFechar: () => void;
   onCriada: (conversationId: string, mensagem: string) => void | Promise<void>;
 }) {
   const [canais, setCanais] = useState<{ id: string; name: string }[] | null>(null);
   const [canalId, setCanalId] = useState("");
-  const [telefone, setTelefone] = useState("");
+  const [telefone, setTelefone] = useState(telefoneInicial);
   const [nome, setNome] = useState("");
   const [erro, setErro] = useState<string | null>(null);
   const [salvando, setSalvando] = useState(false);

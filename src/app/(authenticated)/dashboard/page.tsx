@@ -12,6 +12,7 @@ import {
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { PageHeader } from "@/components/layout/page-header";
+import { ManagementOverview } from "@/components/management/management-overview";
 import { getCurrentUserContext } from "@/lib/auth/current-user";
 import { getHomeForRole } from "@/lib/workspace";
 import { resolveUserDisplayName } from "@/lib/users/account";
@@ -20,6 +21,7 @@ import { leadMediaOptions, preSaleTypes, type PreSalePayment } from "@/types/pre
 type DashboardPageProps = {
   searchParams: Promise<{
     consultant?: string;
+    view?: string;
   }>;
 };
 
@@ -399,6 +401,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
   }
 
   const { todayYmd, monthStartYmd, nextMonthStartYmd, monthEndYmd } = getMonthRange();
+  if (params.view !== "commercial" && !params.consultant) return <ManagementOverview />;
   const remainingBusinessDays = Math.max(countBusinessDays(todayYmd, monthEndYmd), 1);
   const analysisPeriodStartIso = saoPauloDayStartToUtcIso(monthStartYmd);
   const analysisPeriodEndIso = saoPauloDayStartToUtcIso(nextMonthStartYmd);

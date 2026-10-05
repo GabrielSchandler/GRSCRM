@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { PageHeader } from "@/components/layout/page-header";
+import { ManagementTeam } from "@/components/management/management-team";
 import { UserRoleBadge } from "@/components/users/user-role-badge";
 import { UserStatusBadge } from "@/components/users/user-status-badge";
 import { UserToggleStatusButton } from "@/components/users/user-toggle-status-button";
@@ -357,7 +358,7 @@ export default async function UsuariosPage({ searchParams }: UsuariosPageProps) 
   return (
     <>
       <PageHeader
-        title="Usuários"
+        title="Gestão"
         description="Gestão dos usuários da empresa, com controle de licencas e ativacao."
       />
       <div className="space-y-6 p-6">
@@ -371,6 +372,10 @@ export default async function UsuariosPage({ searchParams }: UsuariosPageProps) 
             {pageErrorMessage}
           </div>
         ) : null}
+
+        {!error && <ManagementTeam users={allUsers} initialStatus={params.status === "active" || params.status === "inactive" ? params.status : ""} role={role} licenseLimit={licenseLimit} createBlocked={createBlocked} />}
+        <details className="management-page rounded-lg border border-[var(--ns-border)] p-4">
+        <summary className="cursor-pointer text-sm font-semibold">Licenças e listagem detalhada</summary>
 
         <section className="grid gap-4 md:grid-cols-3">
           <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
@@ -610,6 +615,7 @@ export default async function UsuariosPage({ searchParams }: UsuariosPageProps) 
             </div>
           </section>
         )}
+        </details>
       </div>
     </>
   );

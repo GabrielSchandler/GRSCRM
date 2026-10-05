@@ -167,7 +167,7 @@ export function SendClientEmailModal({
       <button
         type="button"
         onClick={() => setIsOpen(true)}
-        className="inline-flex items-center gap-2 rounded-lg border border-teal-300 bg-teal-50 px-4 py-2.5 text-sm font-semibold text-teal-800 transition hover:bg-teal-100"
+        className="inline-flex items-center gap-2 rounded-[8px] border border-[color-mix(in_srgb,var(--ns-primary)_35%,var(--ns-border))] bg-[color-mix(in_srgb,var(--ns-primary)_10%,var(--ns-surface))] px-4 py-2.5 text-sm font-semibold text-[var(--ns-primary)] transition hover:bg-[color-mix(in_srgb,var(--ns-primary)_16%,var(--ns-surface))]"
       >
         <Mail className="h-4 w-4" />
         Enviar email

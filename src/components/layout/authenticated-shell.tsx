@@ -1,6 +1,7 @@
 "use client";
 
 import { usePathname } from "next/navigation";
+import { ThemeScript } from "@/components/newsec/theme-script";
 
 type AuthenticatedShellProps = {
   children: React.ReactNode;
@@ -14,22 +15,27 @@ export function AuthenticatedShell({
   sidebar,
 }: AuthenticatedShellProps) {
   const pathname = usePathname();
-  const hideSidebar = pathname === "/areas" || pathname.startsWith("/empresas");
+  const hideSidebar = pathname.startsWith("/empresas");
+  const managementPage = ["/dashboard", "/usuarios", "/aprovacoes", "/contratos", "/documentos/templates", "/emails/templates", "/empresa", "/integracoes", "/logs", "/backups"].some(prefix => pathname === prefix || pathname.startsWith(`${prefix}/`));
+
+  const auxiliaryPage = ["/alterar-senha", "/academy/gestao", "/academy/cursos", "/academy/capitulos", "/documentos/gerados", "/documentos/templates/novo", "/documentos/templates/", "/emails/templates", "/integracoes", "/empresa"].some(prefix => pathname === prefix || pathname.startsWith(prefix.endsWith("/") ? prefix : `${prefix}/`));
 
   if (hideSidebar) {
     return (
-      <div className="legacy-newsec min-h-screen bg-[#F4F6FB]">
-        <main className="min-w-0">{children}</main>
+      <div suppressHydrationWarning id="ns-shell-root" className="legacy-newsec ns-shell min-h-screen">
+        <ThemeScript />
+        <main className="min-w-0 auxiliary-scope">{children}</main>
         <footer>{footer}</footer>
       </div>
     );
   }
 
   return (
-    <div className="legacy-newsec min-h-screen bg-[#F4F6FB] md:flex">
+    <div suppressHydrationWarning id="ns-shell-root" className="legacy-newsec ns-shell min-h-screen md:flex">
+      <ThemeScript />
       <div className="md:sticky md:top-0 md:z-40 md:h-screen">{sidebar}</div>
       <div className="flex min-w-0 flex-1 flex-col">
-        <main className="min-w-0 flex-1">{children}</main>
+        <main className={`min-w-0 flex-1 ${managementPage ? "management-scope" : ""} ${auxiliaryPage ? "auxiliary-scope" : ""}`}>{children}</main>
         <footer>{footer}</footer>
       </div>
     </div>

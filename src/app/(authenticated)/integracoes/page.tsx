@@ -135,7 +135,7 @@ export default async function IntegracoesPage({
   return (
     <>
       <PageHeader
-        title="Integrações"
+        title="Gestão"
         description="Conecte canais externos usados pelo CRM para email, WhatsApp, importação de dados e envio de análises."
       />
       <div className="space-y-6 p-6">

@@ -1,3 +1,8 @@
+import { Database, CheckCircle2, HardDrive, Clock } from "lucide-react";
+import { ManagementMetric } from "@/components/management/management-ui";
+import { RevealDetailsButton } from "@/components/newsec/reveal-details-button";
+import { ReferenceCollection } from "@/components/newsec/reference-collection";
+import { ReferenceFacts, ReferenceBadge } from "@/components/newsec/reference-ui";
 import { redirect } from "next/navigation";
 import { PageHeader } from "@/components/layout/page-header";
 import { getCurrentUserContext } from "@/lib/auth/current-user";
@@ -31,7 +36,7 @@ type BackupJob = {
 };
 
 function formatDateTime(value: string | null) {
-  if (!value) {
+  if (value === null) {
     return "-";
   }
 
@@ -125,21 +130,32 @@ export default async function BackupsPage() {
     }
   }
 
-  return (
-    <>
-      <PageHeader
-        title="Backups"
-        description="Gere, baixe e valide copias padronizadas dos dados e documentos do CRM."
-      />
 
-      <div className="space-y-6 p-6">
-        <section className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+  const successful = jobs.filter(job => job.status === "completed");
+  const statusLabel = (job: BackupJob) => ({completed:"Sucesso",failed:"Falha",running:"Em execução",timeout:"Tempo excedido"})[getJobDisplayStatus(job)];
+  return <>
+    <PageHeader title="Gestão" description="Segurança, cópias de dados e recuperação do sistema." />
+    <div className="reference-page space-y-4 p-4 sm:p-6">
+      {error ? <p role="alert" className="text-sm text-[var(--ns-warning)]">{isMissingBackupTable(error) ? "Estrutura de backups não configurada." : error.message}</p> : <>
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <ManagementMetric label="Último backup concluído" value={successful[0] ? formatDateTime(successful[0].completed_at) : "Não disponível"} icon={Database} />
+        <ManagementMetric label="Execuções concluídas" value={`${successful.length} de ${jobs.length}`} detail="Últimas 20 execuções carregadas" icon={CheckCircle2} tone="success" />
+        <ManagementMetric label="Volume dos arquivos listados" value={formatFileSize(jobs.reduce((sum,job) => sum + (job.file_size_bytes ?? 0),0))} icon={HardDrive} />
+        <ManagementMetric label="Cópias disponíveis" value={successful.filter(job => downloadUrls.has(job.id) && new Date(job.expires_at).getTime() > Date.now()).length} icon={Clock} tone="warning" />
+      </div>
+      <ReferenceCollection title="Histórico de backups" detailTitle="Detalhes do backup" columns={["Data e hora","Tipo","Backup","Tamanho","Status","Expira em","Ações"]} rows={jobs.map(job => ({
+        id:job.id,title:job.backup_name,search:[job.backup_name,formatDateTime(job.started_at),statusLabel(job)].join(" "),type:job.trigger_type === "scheduled" ? "Automático" : "Manual",status:statusLabel(job),
+        cells:[formatDateTime(job.started_at),job.trigger_type === "scheduled" ? "Automático" : "Manual",job.backup_name,formatFileSize(job.file_size_bytes),<ReferenceBadge key="status" tone={job.status === "completed" ? "success" : job.status === "failed" ? "danger" : "warning"}>{statusLabel(job)}</ReferenceBadge>,formatDateTime(job.expires_at),downloadUrls.has(job.id) && new Date(job.expires_at).getTime() > Date.now() ? <a key="download" href={downloadUrls.get(job.id)} className="font-semibold text-[var(--ns-primary)]">Baixar</a> : "Indisponível"],
+        detail: <div key={job.id} className="space-y-4"><ReferenceBadge tone={job.status === "completed" ? "success" : "warning"}>{statusLabel(job)}</ReferenceBadge><ReferenceFacts items={[["ID do backup",job.id],["Tipo",job.trigger_type === "scheduled" ? "Automático" : "Manual"],["Tamanho",formatFileSize(job.file_size_bytes)],["Início",formatDateTime(job.started_at)],["Conclusão",formatDateTime(job.completed_at)],["Expiração",formatDateTime(job.expires_at)]]} />{job.error_message && <p className="text-xs text-[var(--ns-danger)]">{job.error_message}</p>}{downloadUrls.has(job.id) && new Date(job.expires_at).getTime() > Date.now() && <a href={downloadUrls.get(job.id)} className="inline-flex rounded-md bg-[var(--ns-primary)] px-4 py-2 text-xs font-semibold text-[var(--ns-primary-foreground)]">Baixar backup</a>}<RevealDetailsButton targetId="ferramentas-backup" className="block text-xs font-semibold text-[var(--ns-primary)]">Ferramentas de recuperação</RevealDetailsButton></div>
+      }))}><div className="grid gap-4 sm:grid-cols-2"><section className="ns-panel p-4"><h2 className="text-sm font-semibold">Retenção</h2><p className="mt-3 text-xs leading-5 text-[var(--ns-text-secondary)]">As cópias automáticas da rotina GitHub são mantidas por 7 dias. A disponibilidade de cada arquivo é indicada por sua expiração.</p></section><section className="ns-panel p-4"><h2 className="text-sm font-semibold">Rotina automática</h2><a href="https://github.com/GabrielSchandler/GRSCRM/actions/workflows/backup.yml" target="_blank" rel="noreferrer" className="mt-3 inline-flex text-xs font-semibold text-[var(--ns-primary)]">Ver rotina no GitHub</a></section></div></ReferenceCollection>
+      </>}
+      <details id="ferramentas-backup" className="ns-panel p-4"><summary className="text-sm font-semibold">Geração, diagnóstico e restauração</summary><div className="mt-4 space-y-4">        <section className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
           <div className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
             <div>
               <p className="text-xs font-semibold uppercase tracking-wide text-teal-700">
                 Backup automático fora da produção
               </p>
-              <h2 className="mt-2 text-2xl font-semibold text-slate-950">
+              <h2 className="mt-2 text-lg font-semibold text-slate-950">
                 Backups privados guardados no GitHub por 7 dias
               </h2>
               <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-600">
@@ -467,7 +483,8 @@ export default async function BackupsPage() {
             </p>
           </div>
         </section>
-      </div>
-    </>
-  );
+</div></details>
+    </div>
+  </>;
 }
+

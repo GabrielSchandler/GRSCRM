@@ -26,14 +26,16 @@ import {
 import { ChangeNoteModal } from "@/components/shared/change-note-modal";
 import {
   displayValue,
-  formatDate,
   formatDateTime,
 } from "@/lib/clients/formatters";
 import {
   getLegalWorkflowStage,
   type LegalWorkflowStageDefinition,
 } from "@/lib/legal/workflow";
-import { formatCurrency, formatUserName } from "@/lib/pre-sales/formatters";
+import {
+  formatPreSaleType,
+  formatUserName,
+} from "@/lib/pre-sales/formatters";
 import { getPreSaleSearchMatches } from "@/lib/pre-sales/search";
 import type { DocumentTemplate, GeneratedDocument } from "@/types/document";
 import type { EmailTemplate } from "@/types/email";
@@ -422,7 +424,7 @@ export function LegalKanban({
 
       <section className="space-y-4">
         <div>
-          <div className="rounded-[12px] border border-[#DDE2EC] bg-white p-4 shadow-none">
+          <div className="rounded-[12px] border border-[var(--ns-border)] bg-[var(--ns-surface)] p-4 shadow-none">
             <div className="flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
               <div className="grid w-full gap-3 xl:grid-cols-4">
                 <div>
@@ -438,7 +440,7 @@ export function LegalKanban({
                     value={searchTerm}
                     onChange={(event) => setSearchTerm(event.target.value)}
                     placeholder="Buscar cliente / CPF"
-                    className="w-full rounded-[10px] border border-[#DDE2EC] bg-[#EEF1F8] px-3 py-2.5 text-sm text-[#11182E] outline-none transition focus:border-[#5267F5] focus:ring-2 focus:ring-[#5267F5]/15"
+                    className="w-full rounded-[10px] border border-[var(--ns-border)] bg-[var(--ns-surface-alt)] px-3 py-2.5 text-sm text-[var(--ns-text)] outline-none transition focus:border-[var(--ns-primary)] focus:ring-2 focus:ring-[color-mix(in_srgb,var(--ns-primary)_18%,transparent)]"
                   />
                 </div>
                 <div>
@@ -452,7 +454,7 @@ export function LegalKanban({
                     id="legal-status-filter"
                     value={statusFilter}
                     onChange={(event) => setStatusFilter(event.target.value as LegalStatusFilter)}
-                    className="w-full rounded-[10px] border border-[#DDE2EC] bg-[#EEF1F8] px-3 py-2.5 text-sm font-semibold text-[#11182E] outline-none transition focus:border-[#5267F5] focus:ring-2 focus:ring-[#5267F5]/15"
+                    className="w-full rounded-[10px] border border-[var(--ns-border)] bg-[var(--ns-surface-alt)] px-3 py-2.5 text-sm font-semibold text-[var(--ns-text)] outline-none transition focus:border-[var(--ns-primary)] focus:ring-2 focus:ring-[color-mix(in_srgb,var(--ns-primary)_18%,transparent)]"
                   >
                     <option value="active">Ativos na esteira</option>
                     <option value="inativo">Inativos</option>
@@ -471,7 +473,7 @@ export function LegalKanban({
                     id="legal-admin-filter"
                     value={adminFilter}
                     onChange={(event) => setAdminFilter(event.target.value)}
-                    className="w-full rounded-[10px] border border-[#DDE2EC] bg-[#EEF1F8] px-3 py-2.5 text-sm font-semibold text-[#11182E] outline-none transition focus:border-[#5267F5] focus:ring-2 focus:ring-[#5267F5]/15"
+                    className="w-full rounded-[10px] border border-[var(--ns-border)] bg-[var(--ns-surface-alt)] px-3 py-2.5 text-sm font-semibold text-[var(--ns-text)] outline-none transition focus:border-[var(--ns-primary)] focus:ring-2 focus:ring-[color-mix(in_srgb,var(--ns-primary)_18%,transparent)]"
                   >
                     <option value="all">Todos</option>
                     <option value="none">Sem adm responsável</option>
@@ -493,7 +495,7 @@ export function LegalKanban({
                     id="legal-consultant-filter"
                     value={consultantFilter}
                     onChange={(event) => setConsultantFilter(event.target.value)}
-                    className="w-full rounded-[10px] border border-[#DDE2EC] bg-[#EEF1F8] px-3 py-2.5 text-sm font-semibold text-[#11182E] outline-none transition focus:border-[#5267F5] focus:ring-2 focus:ring-[#5267F5]/15"
+                    className="w-full rounded-[10px] border border-[var(--ns-border)] bg-[var(--ns-surface-alt)] px-3 py-2.5 text-sm font-semibold text-[var(--ns-text)] outline-none transition focus:border-[var(--ns-primary)] focus:ring-2 focus:ring-[color-mix(in_srgb,var(--ns-primary)_18%,transparent)]"
                   >
                     <option value="all">Todos</option>
                     <option value="none">Sem consultor responsável</option>
@@ -517,17 +519,17 @@ export function LegalKanban({
           return (
             <div
               key={stage.id}
-              className="relative overflow-hidden rounded-[12px] border border-[#DDE2EC] bg-white p-4 shadow-none"
+              className="relative overflow-hidden rounded-[12px] border border-[var(--ns-border)] bg-[var(--ns-surface)] p-4 shadow-none"
             >
               <span
                 className="absolute bottom-0 left-0 top-0 block w-1"
                 style={{ backgroundColor: stage.color }}
               />
-              <p className="text-xs font-semibold uppercase text-[#69738A]">
+              <p className="text-xs font-semibold uppercase text-[var(--ns-muted)]">
                 {stage.shortLabel}
               </p>
-              <p className="mt-2 text-2xl font-semibold text-[#11182E]">{total}</p>
-              <p className="mt-1 text-sm leading-6 text-[#69738A]">
+              <p className="mt-2 text-2xl font-semibold text-[var(--ns-text)]">{total}</p>
+              <p className="mt-1 text-sm leading-6 text-[var(--ns-muted)]">
                 {stage.documents.join(", ")}
               </p>
             </div>
@@ -564,24 +566,33 @@ export function LegalKanban({
               onDrop={() => handleDrop(stage.id)}
               className={`flex min-h-[620px] w-[300px] flex-none flex-col rounded-[12px] border shadow-none transition ${
                 dropTarget === stage.id
-                  ? "border-[#9EAAFF] bg-[#EEF0FF] ring-2 ring-[#C9D0FF]"
-                  : "border-[#DDE2EC] bg-white"
+                  ? "border-[var(--ns-primary)] bg-[color-mix(in_srgb,var(--ns-primary)_8%,var(--ns-surface))] ring-2 ring-[color-mix(in_srgb,var(--ns-primary)_25%,transparent)]"
+                  : "border-[var(--ns-border)] bg-[var(--ns-surface)]"
               }`}
             >
-              <div className="border-b border-[#DDE2EC] px-3 py-3">
-                <span
-                  className="mr-2 inline-block h-3 w-3 rounded-full align-middle"
-                  style={{ backgroundColor: stage.color }}
-                />
-                <h2 className="inline text-sm font-semibold text-[#11182E]">{stage.label}</h2>
-                <p className="mt-2 text-xs leading-5 text-[#69738A]">
-                  {stage.description}
-                </p>
-                <p className="mt-2 text-xs font-medium text-[#69738A]">
-                  Templates esperados: {stage.documents.join(" | ")}
-                </p>
+              <div className="border-b border-[var(--ns-border)] px-3 py-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="group relative flex min-w-0 items-center gap-2" tabIndex={0}>
+                    <span
+                      className="inline-block h-3 w-3 shrink-0 rounded-full"
+                      style={{ backgroundColor: stage.color }}
+                    />
+                    <h2 className="truncate text-sm font-semibold text-[var(--ns-text)]">
+                      {stage.label}
+                    </h2>
+                    <div
+                      role="tooltip"
+                      className="pointer-events-none absolute left-0 top-full z-30 mt-2 hidden w-64 rounded-[10px] border border-[var(--ns-border)] bg-[var(--ns-surface)] px-3 py-2 text-xs font-normal leading-5 text-[var(--ns-muted)] shadow-lg group-focus:block group-hover:block"
+                    >
+                      {stage.description}
+                    </div>
+                  </div>
+                  <span className="rounded-full border border-[var(--ns-border)] bg-[color-mix(in_srgb,var(--ns-primary)_10%,var(--ns-surface))] px-3 py-1 text-xs font-semibold text-[var(--ns-primary)]">
+                    {stagePreSales.length}
+                  </span>
+                </div>
                 {canEditWorkflow && allStagePreSales.length ? (
-                  <label className="mt-3 flex cursor-pointer items-center gap-2 text-xs font-semibold text-teal-800">
+                  <label className="mt-3 flex cursor-pointer items-center gap-2 text-xs font-semibold text-[var(--ns-primary)]">
                     <input
                       type="checkbox"
                       checked={allStagePreSales.every((preSale) =>
@@ -590,7 +601,7 @@ export function LegalKanban({
                       onChange={() =>
                         toggleStageSelection(allStagePreSales.map((preSale) => preSale.id))
                       }
-                      className="h-4 w-4 rounded border-slate-300 text-teal-700"
+                      className="h-4 w-4 rounded border-[var(--ns-border)] text-[var(--ns-primary)]"
                     />
                     Selecionar todos da coluna ({allStagePreSales.length})
                   </label>
@@ -623,10 +634,20 @@ export function LegalKanban({
                           setDraggedId(null);
                           setDropTarget(null);
                         }}
-                        className={`rounded-[10px] border p-4 transition ${
+                        role="link"
+                        tabIndex={0}
+                        aria-label={`Abrir pré-venda de ${displayValue(preSale.client?.full_name ?? null)}`}
+                        onClick={() => router.push(`/pre-vendas/${preSale.id}`)}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter" || event.key === " ") {
+                            event.preventDefault();
+                            router.push(`/pre-vendas/${preSale.id}`);
+                          }
+                        }}
+                        className={`rounded-[10px] border p-4 outline-none transition focus-visible:ring-2 focus-visible:ring-[var(--ns-primary)] ${
                           draggedId === preSale.id
-                            ? "cursor-grabbing border-[#9EAAFF] bg-white opacity-70"
-                            : "cursor-grab border-[#DDE2EC] bg-[#F4F6FB]"
+                            ? "cursor-grabbing border-[var(--ns-primary)] bg-[var(--ns-surface)] opacity-70"
+                            : "cursor-grab border-[var(--ns-border)] bg-[var(--ns-surface-alt)] hover:border-[color-mix(in_srgb,var(--ns-primary)_45%,var(--ns-border))] hover:bg-[color-mix(in_srgb,var(--ns-primary)_6%,var(--ns-surface-alt))]"
                         }`}
                       >
                         <div className="flex items-start justify-between gap-3">
@@ -637,95 +658,73 @@ export function LegalKanban({
                                 checked={selectedPreSaleIds.includes(preSale.id)}
                                 onChange={() => toggleSelected(preSale.id)}
                                 onClick={(event) => event.stopPropagation()}
-                                className="mt-0.5 h-4 w-4 shrink-0 rounded border-slate-300 text-teal-700"
+                                className="mt-0.5 h-4 w-4 shrink-0 rounded border-[var(--ns-border)] text-[var(--ns-primary)]"
                                 aria-label={`Selecionar ${displayValue(preSale.client?.full_name ?? null)}`}
                               />
                             ) : null}
                             <div className="min-w-0">
-                            <h3 className="text-sm font-semibold text-[#11182E]">
+                            <h3 className="text-sm font-semibold text-[var(--ns-text)]">
                               {displayValue(preSale.client?.full_name ?? null)}
                             </h3>
                             <PreSaleSearchMatchBadges matches={searchMatches} />
-                            <p className="mt-1 text-xs text-[#69738A]">
-                              {stageMeta.shortLabel} • {getStageAgeLabel(preSale.stageUpdatedAt)}
-                            </p>
                             </div>
                           </div>
                           <div className="flex flex-col items-end gap-2">
                             {isArchivedPreSaleStatus(preSale.status) ? (
                               <PreSalesStatusBadge status={preSale.status} />
                             ) : null}
-                            <span className="rounded-full border border-[#DDE2EC] bg-[#EEF0FF] px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-[#5267F5]">
-                              {stageDocuments.length} docs
+                            <span className="rounded-full border border-[var(--ns-border)] bg-[color-mix(in_srgb,var(--ns-primary)_9%,var(--ns-surface))] px-2.5 py-1 text-[11px] font-semibold text-[var(--ns-primary)]">
+                              {getStageAgeLabel(preSale.stageUpdatedAt)}
                             </span>
                           </div>
                         </div>
 
-                        <div className="mt-4 space-y-2 border-t border-[#DDE2EC] pt-3 text-xs text-[#69738A]">
+                        <div className="mt-4 space-y-2 border-t border-[var(--ns-border)] pt-3 text-xs text-[var(--ns-muted)]">
                           <p>
-                            <span className="font-semibold text-[#56627C]">Consultor:</span>{" "}
-                            {formatUserName(preSale.consultant)}
-                          </p>
-                          <p>
-                            <span className="font-semibold text-[#56627C]">Adm responsável:</span>{" "}
-                            {formatUserName(
-                              legalAdmins.find(
-                                (admin) => admin.id === preSale.legalResponsibleUserId,
-                              ) ?? null,
-                            )}
-                          </p>
-                          <p>
-                            <span className="font-semibold text-[#56627C]">Consultor responsável:</span>{" "}
+                            <span className="font-semibold text-[var(--ns-text)]">Responsável:</span>{" "}
                             {formatUserName(
                               legalConsultants.find(
                                 (consultant) => consultant.id === preSale.legalConsultantUserId,
-                              ) ?? null,
+                              ) ??
+                                legalAdmins.find(
+                                  (admin) => admin.id === preSale.legalResponsibleUserId,
+                                ) ??
+                                preSale.consultant,
                             )}
                           </p>
                           <p>
-                            <span className="font-semibold text-[#56627C]">Valor:</span>{" "}
-                            {formatCurrency(preSale.contract_value)}
-                          </p>
-                          <p>
-                            <span className="font-semibold text-[#56627C]">Aprovado em:</span>{" "}
-                            {formatDateTime(preSale.created_at)}
-                          </p>
-                          <p>
-                            <span className="font-semibold text-[#56627C]">Ultima mudança:</span>{" "}
-                            {formatDate(preSale.stageUpdatedAt)}
+                            <span className="font-semibold text-[var(--ns-text)]">Pré-venda:</span>{" "}
+                            {formatPreSaleType(preSale.pre_sale_type)}
                           </p>
                         </div>
 
-                        <div className="mt-4">
-                          <LegalStageSelect
-                            preSaleId={preSale.id}
-                            currentStageId={preSale.currentLegalStageId}
-                            stages={stages}
-                          />
-                        </div>
-
-                        <div className="mt-4 flex flex-wrap gap-2">
+                        <div className="mt-4 grid grid-cols-2 gap-2" onClick={(event) => event.stopPropagation()}>
                           <Link
                             href={`/clientes/${preSale.client_id}`}
-                            className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-100"
+                            className="rounded-[8px] border border-[var(--ns-border)] bg-[var(--ns-surface)] px-3 py-2 text-center text-xs font-semibold text-[var(--ns-text)] transition hover:bg-[var(--ns-surface-alt)]"
                           >
                             Cliente
                           </Link>
                           <Link
                             href={`/pre-vendas/${preSale.id}`}
-                            className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-100"
+                            className="rounded-[8px] border border-[var(--ns-primary)] bg-[var(--ns-primary)] px-3 py-2 text-center text-xs font-semibold text-white transition hover:opacity-90"
                           >
                             Pré-venda
                           </Link>
-                          <Link
-                            href="/documentos"
-                            className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-100"
-                          >
-                            Documentos
-                          </Link>
                         </div>
 
-                        <div className="mt-3 flex flex-wrap gap-2">
+                        <details className="mt-3" onClick={(event) => event.stopPropagation()}>
+                          <summary className="cursor-pointer text-xs font-semibold text-[var(--ns-muted)] transition hover:text-[var(--ns-text)]">
+                            Mais ações
+                          </summary>
+                          <div className="mt-3 space-y-3 border-t border-[var(--ns-border)] pt-3">
+                            <LegalStageSelect
+                              preSaleId={preSale.id}
+                              currentStageId={preSale.currentLegalStageId}
+                              stages={stages}
+                            />
+
+                            <div className="flex flex-wrap gap-2">
                           {isArchivedPreSaleStatus(preSale.status) ? (
                             <button
                               type="button"
@@ -755,17 +754,14 @@ export function LegalKanban({
                               </button>
                             </>
                           )}
-                        </div>
+                            </div>
 
-                        <div className="mt-4">
-                          <GenerateDocumentModal
-                            preSaleId={preSale.id}
-                            templates={stageTemplates}
-                          />
-                        </div>
+                            <GenerateDocumentModal
+                              preSaleId={preSale.id}
+                              templates={stageTemplates}
+                            />
 
-                        <div className="mt-3">
-                          <SendClientEmailModal
+                            <SendClientEmailModal
                             clientId={preSale.client_id}
                             preSaleId={preSale.id}
                             clientEmail={preSale.client?.email ?? null}
@@ -815,10 +811,9 @@ export function LegalKanban({
                                 preSale.financialCase?.contract_number ??
                                 "Não informado",
                             }}
-                          />
-                        </div>
+                            />
 
-                        <div className="mt-4 space-y-2 rounded-lg border border-slate-200 bg-white p-3">
+                            <div className="space-y-2 rounded-[8px] border border-[var(--ns-border)] bg-[var(--ns-surface)] p-3">
                           <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                             Documentos desta etapa
                           </p>
@@ -863,7 +858,9 @@ export function LegalKanban({
                               correspondente.
                             </p>
                           )}
-                        </div>
+                            </div>
+                          </div>
+                        </details>
                       </article>
                     );
                   })

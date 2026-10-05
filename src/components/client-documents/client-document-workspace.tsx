@@ -49,7 +49,7 @@ export function ClientDocumentWorkspace({
 
   return (
     <div className="space-y-5">
-      <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
+      <div className="rounded-[10px] border border-[var(--ns-border)] bg-[var(--ns-surface)] p-3 shadow-none">
         <div
           role="tablist"
           aria-label="Categorias de documentos do cliente"
@@ -70,10 +70,10 @@ export function ClientDocumentWorkspace({
                 aria-controls={`client-document-panel-${type.value}`}
                 id={`client-document-tab-${type.value}`}
                 onClick={() => setActiveDocumentType(type.value)}
-                className={`rounded-lg border px-4 py-4 text-left transition ${
+                className={`cursor-pointer rounded-[8px] border px-4 py-4 text-left outline-none transition focus-visible:ring-2 focus-visible:ring-[var(--ns-primary)] ${
                   isActive
-                    ? "border-teal-600 bg-slate-950 text-white shadow-sm"
-                    : "border-slate-200 bg-slate-50 text-slate-700 hover:border-teal-200 hover:bg-teal-50"
+                    ? "border-[var(--ns-primary)] bg-[var(--ns-primary)] text-white shadow-sm"
+                    : "border-[var(--ns-border)] bg-[var(--ns-surface-alt)] text-[var(--ns-text)] hover:border-[color-mix(in_srgb,var(--ns-primary)_45%,var(--ns-border))] hover:bg-[color-mix(in_srgb,var(--ns-primary)_7%,var(--ns-surface-alt))]"
                 }`}
               >
                 <span className="flex items-start justify-between gap-3">
@@ -88,7 +88,7 @@ export function ClientDocumentWorkspace({
                     </span>
                     <span
                       className={`mt-2 block text-xs leading-5 ${
-                        isActive ? "text-slate-200" : "text-slate-500"
+                        isActive ? "text-white/80" : "text-[var(--ns-muted)]"
                       }`}
                     >
                       {documentTypeDescriptions[type.value]}
@@ -97,7 +97,7 @@ export function ClientDocumentWorkspace({
                   <span
                     className={`shrink-0 rounded-full border px-2.5 py-1 text-xs font-semibold ${
                       isActive
-                        ? "border-white/20 bg-white/10 text-white"
+                    ? "border-white/25 bg-white/15 text-white"
                         : clientDocumentBadgeClass(type.value)
                     }`}
                   >
@@ -116,16 +116,16 @@ export function ClientDocumentWorkspace({
         aria-labelledby={`client-document-tab-${activeDocumentType}`}
         className="space-y-4"
       >
-        <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="rounded-[10px] border border-[var(--ns-border)] bg-[var(--ns-surface)] p-5 shadow-none">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-teal-700">
+              <p className="text-xs font-semibold uppercase tracking-wide text-[var(--ns-primary)]">
                 {activeType?.label ?? "Documentação"}
               </p>
-              <h3 className="mt-1 text-base font-semibold text-slate-950">
+              <h3 className="mt-1 text-base font-semibold text-[var(--ns-text)]">
                 {activeDocuments.length} documento(s) nesta área
               </h3>
-              <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-600">
+              <p className="mt-1 max-w-3xl text-sm leading-6 text-[var(--ns-muted)]">
                 {documentTypeDescriptions[activeDocumentType]}
               </p>
             </div>

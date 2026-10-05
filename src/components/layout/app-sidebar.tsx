@@ -21,7 +21,7 @@ const navigation: SidebarNavigationItem[] = [
   // Chat (01/10/2026, pedido do Gabriel): para todos os usuários, em todas as áreas.
   { href: "/atendimento", label: "Atendimento WhatsApp", icon: "chat" },
   { href: "/chat-interno", label: "Chat interno", icon: "internalChat" },
-  { href: "/dashboard", label: "Painel comercial", icon: "dashboard" },
+  { href: "/dashboard", label: "Gestão", icon: "dashboard" },
   {
     href: "/aprovacoes",
     label: "Aprovações do cliente",
@@ -71,7 +71,7 @@ const navigation: SidebarNavigationItem[] = [
     icon: "leads",
     managerOnly: true,
   },
-  { href: "/financeiro", label: "Lancamentos", icon: "finance", adminOnly: true },
+  { href: "/financeiro", label: "Financeiro", icon: "finance", adminOnly: true },
   { href: "/financeiro/consultas", label: "Consultas", icon: "finance", adminOnly: true },
 ];
 

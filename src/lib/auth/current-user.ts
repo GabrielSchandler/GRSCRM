@@ -2,6 +2,7 @@ import { cache } from "react";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { isCompanyBlocked } from "@/lib/company/lifecycle";
 import type { CompanyUserRole } from "@/types/user";
 import type { LegalUserRole } from "@/types/user";
 import {
@@ -81,6 +82,11 @@ const loadCurrentUserContext = cache(async () => {
   }
 
   const isPlatformOwner = Boolean(profile.is_platform_owner);
+  if (!isPlatformOwner) {
+    const { data: companySettings, error: settingsError } = await supabase.from("company_platform_settings").select("status").eq("company_id", profile.company_id).maybeSingle();
+    if (settingsError && !["PGRST205", "42P01"].includes(settingsError.code)) throw new UserProfileContextError("Não foi possível verificar o acesso da empresa.");
+    if (isCompanyBlocked(companySettings?.status)) redirect("/conta-inativa?motivo=empresa");
+  }
   const cookieStore = await cookies();
   const selectedCompanyId = isPlatformOwner
     ? cookieStore.get(ACTIVE_COMPANY_COOKIE_NAME)?.value ?? null

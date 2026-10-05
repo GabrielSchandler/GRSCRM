@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { House } from "lucide-react";
+import { House, ChevronDown } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import {
@@ -60,6 +60,7 @@ export function SidebarFrame({
   }, [pathname]);
 
   const currentWorkspace = useMemo(() => {
+    if (pathname === "/areas") return workspacePreference;
     const pathWorkspace = classifyWorkspacePath(pathname);
 
     if (pathWorkspace) {
@@ -211,7 +212,8 @@ export function SidebarFrame({
           <p className="mt-3 text-[10px] font-semibold uppercase tracking-[0.08em] text-[#A9B6D0]">CRM • {workspaceLabel}</p>
         </div>
 
-        <div className="mt-5 flex min-w-0 flex-1">
+        <Link href="/areas" className="mt-5 flex items-center justify-between rounded-lg bg-white/5 px-4 py-3 text-white transition hover:bg-white/10"><span><span className="block text-[10px] text-[#A9B6D0]">Workspace</span><span className="mt-1 block text-sm font-semibold">{workspaceLabel}</span></span><ChevronDown className="h-4 w-4" /></Link>
+        <div className="mt-4 flex min-h-0 min-w-0 flex-1 overflow-y-auto">
           <div className="flex min-w-0 flex-1 flex-col gap-3">
             <div>
               <Link
@@ -220,7 +222,7 @@ export function SidebarFrame({
                 onClick={() => {
                   document.cookie = `${WORKSPACE_COOKIE_NAME}=${currentWorkspace}; path=/; max-age=${60 * 60 * 24 * 30}; samesite=lax`;
                 }}
-                className="inline-flex w-full min-w-0 items-center gap-3 overflow-hidden rounded-[10px] bg-[#5267F5] px-4 py-3 text-sm font-semibold text-white transition hover:bg-[#4053DE] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7385FF] focus-visible:ring-offset-2 focus-visible:ring-offset-[#10172F]"
+                className={`inline-flex w-full min-w-0 items-center gap-3 overflow-hidden rounded-lg px-4 py-3 text-sm font-semibold text-white transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7385FF] ${pathname === homeHref ? "bg-[#5267F5]" : "hover:bg-white/5"}`}
               >
                 <House aria-hidden="true" className="h-4 w-4 shrink-0" />
                 <span className="min-w-0 truncate whitespace-nowrap">Tela inicial</span>

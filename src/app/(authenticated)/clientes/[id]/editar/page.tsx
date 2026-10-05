@@ -60,7 +60,7 @@ export default async function EditarClientePage({ params }: EditarClientePagePro
         description="Atualize os dados do cliente mantendo o vínculo com a empresa autenticada."
       />
       <div className="p-6">
-        <div className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+        <div>
           <ClientForm
             submitLabel="Salvar alterações"
             defaultValues={clientToFormValues(client)}

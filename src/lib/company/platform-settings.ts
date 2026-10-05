@@ -3,6 +3,7 @@ import type {
   CompanyPlatformStatus,
 } from "@/types/company";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { isCompanyBlocked } from "@/lib/company/lifecycle";
 
 export type CompanyModuleKey =
   | "commercial"
@@ -254,6 +255,7 @@ export function isModuleEnabled(
   settings: CompanyPlatformSettings,
   module: CompanyModuleKey,
 ) {
+  if (isCompanyBlocked(settings.status)) return false;
   const definition = companyModuleDefinitions.find((item) => item.key === module);
 
   if (!definition) {

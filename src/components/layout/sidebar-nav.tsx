@@ -82,6 +82,7 @@ const icons = {
 };
 
 function isActivePath(pathname: string, href: string) {
+  if (href === "/integracoes") return pathname === href;
   if (href === "/documentos") {
     return pathname === href || pathname.startsWith("/documentos/gerados");
   }

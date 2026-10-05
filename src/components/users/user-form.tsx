@@ -1,6 +1,8 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
+import { UserRound, LockKeyhole, Users, Target } from "lucide-react";
+import { ReferenceFacts, ReferenceBadge } from "@/components/newsec/reference-ui";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { ChangeEvent } from "react";
@@ -47,6 +49,14 @@ type EditUserFormProps = {
 type UserFormProps =
   | ({ mode: "create" } & CreateUserFormProps)
   | ({ mode: "edit" } & EditUserFormProps);
+
+function UserSectionTitle({ title, icon: Icon }: { title: string; icon: typeof UserRound }) {
+  return <div className="flex items-center gap-3 md:col-span-2"><span className="rounded-md bg-[var(--ns-surface-hover)] p-2 text-[var(--ns-primary)]"><Icon className="h-5 w-5" /></span><h2 className="text-sm font-semibold">{title}</h2></div>;
+}
+
+function UserSummary({ name, username, area, role, active, ready }: { name: string; username: string; area: string; role: string; active: boolean; ready: boolean }) {
+  return <aside className="ns-panel self-start space-y-4 p-5 xl:sticky xl:top-4"><h2 className="text-sm font-semibold">Resumo do usuário</h2><div className="flex items-center gap-3"><UserRound className="h-10 w-10 rounded-full bg-[var(--ns-surface-hover)] p-2 text-[var(--ns-primary)]" /><div><p className="text-sm font-semibold">{name || "Novo usuário"}</p><p className="text-xs text-[var(--ns-text-secondary)]">{username || "Login não informado"}</p></div></div><ReferenceBadge tone={active ? "success" : "warning"}>{active ? "Ativo" : "Desativado"}</ReferenceBadge><ReferenceFacts items={[["Área",companyBusinessAreas.find(item => item.value === area)?.label ?? "-"],["Perfil",companyUserRoles.find(item => item.value === role)?.label ?? "-"],["Dados obrigatórios",ready ? "Preenchidos" : "Há campos pendentes"]]} /><Link href="/usuarios" className="inline-flex text-xs font-semibold text-[var(--ns-primary)]">Voltar à equipe</Link></aside>;
+}
 
 function availableRoles(canAssignAdmin: boolean) {
   return companyUserRoles.filter((item) => canAssignAdmin || item.value !== "admin");
@@ -162,8 +172,10 @@ function CreateUserForm({
   }
 
   return (
-    <form className="space-y-8" onSubmit={handleSubmit(onValidSubmit)}>
-      <div className="grid gap-5 rounded-lg border border-slate-200 bg-white p-5 shadow-sm md:grid-cols-2">
+    <form className="reference-page grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_320px]" onSubmit={handleSubmit(onValidSubmit)}>
+      <div className="min-w-0 space-y-4">
+      <div className="ns-panel grid gap-4 p-5 md:grid-cols-2">
+        <UserSectionTitle title="Dados pessoais" icon={UserRound} />
         <div className="space-y-2">
           <FormFieldLabel
             htmlFor="full_name"
@@ -213,6 +225,9 @@ function CreateUserForm({
           ) : null}
         </div>
 
+      </div>
+      <div className="ns-panel grid gap-4 p-5 md:grid-cols-2">
+        <UserSectionTitle title="Acesso e autenticação" icon={LockKeyhole} />
         <div className="space-y-2">
           <FormFieldLabel
             htmlFor="username"
@@ -256,6 +271,9 @@ function CreateUserForm({
           ) : null}
         </div>
 
+      </div>
+      <div className="ns-panel grid gap-4 p-5 md:grid-cols-2">
+        <UserSectionTitle title="Área, perfil e permissões" icon={Users} />
         <div className="space-y-2">
           <FormFieldLabel
             htmlFor="business_area"
@@ -345,6 +363,7 @@ function CreateUserForm({
           </>
         ) : null}
 
+        <UserSectionTitle title="Metas" icon={Target} />
         {shouldShowMonthlyGoal ? (
           <div className="space-y-2">
             <FormFieldLabel
@@ -387,6 +406,7 @@ function CreateUserForm({
 
       <UserActionMessage state={actionState} />
       <UserFormFooter disabled={disabled} submitLabel={submitLabel} />
+      </div><UserSummary name={watch("full_name")} username={watch("username")} area={businessArea} role={userRole} active ready={Boolean(watch("full_name")?.trim() && watch("username")?.trim() && (watch("temporary_password")?.length ?? 0) >= 12)} />
     </form>
   );
 }
@@ -439,8 +459,10 @@ function EditUserForm({
   }
 
   return (
-    <form className="space-y-8" onSubmit={handleSubmit(onValidSubmit)}>
-      <div className="grid gap-5 rounded-lg border border-slate-200 bg-white p-5 shadow-sm md:grid-cols-2">
+    <form className="reference-page grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_320px]" onSubmit={handleSubmit(onValidSubmit)}>
+      <div className="min-w-0 space-y-4">
+      <div className="ns-panel grid gap-4 p-5 md:grid-cols-2">
+        <UserSectionTitle title="Dados pessoais" icon={UserRound} />
         <div className="space-y-2">
           <FormFieldLabel
             htmlFor="full_name"
@@ -490,6 +512,9 @@ function EditUserForm({
           ) : null}
         </div>
 
+      </div>
+      <div className="ns-panel grid gap-4 p-5 md:grid-cols-2">
+        <UserSectionTitle title="Acesso e autenticação" icon={LockKeyhole} />
         <div className="space-y-2">
           <FormFieldLabel
             htmlFor="username"
@@ -512,6 +537,9 @@ function EditUserForm({
           ) : null}
         </div>
 
+      </div>
+      <div className="ns-panel grid gap-4 p-5 md:grid-cols-2">
+        <UserSectionTitle title="Área, perfil e permissões" icon={Users} />
         <div className="space-y-2">
           <FormFieldLabel
             htmlFor="business_area"
@@ -601,6 +629,7 @@ function EditUserForm({
           </>
         ) : null}
 
+        <UserSectionTitle title="Metas" icon={Target} />
         {shouldShowMonthlyGoal ? (
           <div className="space-y-2">
             <FormFieldLabel
@@ -652,7 +681,7 @@ function EditUserForm({
       </div>
 
       {canManagePasswords ? (
-        <div className="grid gap-5 rounded-lg border border-slate-200 bg-white p-5 shadow-sm md:grid-cols-2">
+        <div className="ns-panel grid gap-4 p-5 md:grid-cols-2">
           <div className="md:col-span-2">
             <h2 className="text-base font-semibold text-slate-950">
               Senha de acesso
@@ -714,6 +743,7 @@ function EditUserForm({
 
       <UserActionMessage state={actionState} />
       <UserFormFooter disabled={disabled} submitLabel={submitLabel} />
+      </div><UserSummary name={watch("full_name")} username={watch("username")} area={businessArea} role={userRole} active={watch("is_active")} ready={Boolean(watch("full_name")?.trim() && watch("username")?.trim())} />
     </form>
   );
 }

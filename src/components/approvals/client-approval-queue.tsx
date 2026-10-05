@@ -62,6 +62,7 @@ export type DocumentApprovalQueueItem = {
 };
 
 type ClientApprovalQueueProps = {
+  compact?: boolean;
   trackingItems: TrackingApprovalQueueItem[];
   documentItems: DocumentApprovalQueueItem[];
 };
@@ -75,6 +76,7 @@ function decisionButtonClass(decision: "approve" | "reject") {
 }
 
 export function ClientApprovalQueue({
+  compact = false,
   trackingItems,
   documentItems,
 }: ClientApprovalQueueProps) {
@@ -199,8 +201,8 @@ export function ClientApprovalQueue({
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col gap-4 border-b border-slate-200 pb-5 lg:flex-row lg:items-end lg:justify-between">
+    <div className={`space-y-6 ${compact ? "approval-compact" : ""}`}>
+      <div className={`${compact ? "hidden" : "flex"} flex-col gap-4 border-b border-slate-200 pb-5 lg:flex-row lg:items-end lg:justify-between`}>
         <div>
           <p className="text-xs font-semibold uppercase text-teal-700">Fila de revisão</p>
           <h2 className="mt-1 text-xl font-semibold text-slate-950">

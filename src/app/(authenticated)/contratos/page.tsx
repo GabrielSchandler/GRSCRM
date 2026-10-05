@@ -1,4 +1,10 @@
 import Link from "next/link";
+import { FileText, Users, Files, Braces } from "lucide-react";
+import { ManagementMetric } from "@/components/management/management-ui";
+import { ReferenceCollection } from "@/components/newsec/reference-collection";
+import { ReferenceFacts, ReferenceBadge } from "@/components/newsec/reference-ui";
+import { documentVariableCatalog } from "@/lib/documents/template-engine";
+import { documentStatusLabels, documentTemplateTypes } from "@/types/document";
 import { PageHeader } from "@/components/layout/page-header";
 import { getCurrentUserContext } from "@/lib/auth/current-user";
 import { displayValue, formatDateTime } from "@/lib/clients/formatters";
@@ -6,7 +12,7 @@ import type { Client } from "@/types/client";
 import type { DocumentTemplate, GeneratedDocument } from "@/types/document";
 
 export default async function ContratosPage() {
-  const { supabase, companyId } = await getCurrentUserContext();
+  const { supabase, companyId, role } = await getCurrentUserContext();
   const { data, error } = await supabase
     .from("generated_documents")
     .select("*")
@@ -39,89 +45,39 @@ export default async function ContratosPage() {
   const clients = (clientsData ?? []) as Pick<Client, "id" | "full_name">[];
   const templates = (templatesData ?? []) as Pick<DocumentTemplate, "id" | "name">[];
 
-  return (
-    <>
-      <PageHeader
-        title="Contratos"
-        description="Contratos gerados a partir das pré-vendas da empresa."
-      />
-      <div className="space-y-6 p-6">
-        <div className="rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600 shadow-sm">
-          Esta tela lista documentos gerados do tipo contrato. A gestão jurídica
-          completa, assinatura e versionamento podem entrar na próxima etapa.
-        </div>
 
-        {error ? (
-          <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-            {error.message}
-          </div>
-        ) : (
-          <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[920px] border-collapse text-left text-sm">
-                <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
-                  <tr>
-                    <th className="px-4 py-3 font-semibold">Contrato</th>
-                    <th className="px-4 py-3 font-semibold">Cliente</th>
-                    <th className="px-4 py-3 font-semibold">Template</th>
-                    <th className="px-4 py-3 font-semibold">Data</th>
-                    <th className="px-4 py-3 font-semibold">Ações</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {contracts.map((contract) => {
-                    const client = clients.find((item) => item.id === contract.client_id);
-                    const template = templates.find(
-                      (item) => item.id === contract.template_id,
-                    );
-
-                    return (
-                      <tr key={contract.id} className="transition hover:bg-slate-50">
-                        <td className="px-4 py-3 font-medium text-slate-950">
-                          {displayValue(contract.title)}
-                        </td>
-                        <td className="px-4 py-3 text-slate-700">
-                          {displayValue(client?.full_name ?? null)}
-                        </td>
-                        <td className="px-4 py-3 text-slate-700">
-                          {displayValue(template?.name ?? null)}
-                        </td>
-                        <td className="px-4 py-3 text-slate-700">
-                          {formatDateTime(contract.created_at)}
-                        </td>
-                        <td className="px-4 py-3">
-                          <div className="flex flex-wrap gap-2">
-                            <Link
-                              href={`/documentos/gerados/${contract.id}`}
-                              className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-                            >
-                              Visualizar
-                            </Link>
-                            <Link
-                              href={`/documentos/gerados/${contract.id}/imprimir?print=1`}
-                              target="_blank"
-                              className="rounded-lg border border-teal-300 bg-teal-50 px-3 py-2 text-sm font-semibold text-teal-800 transition hover:bg-teal-100"
-                            >
-                              PDF
-                            </Link>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                  {!contracts.length ? (
-                    <tr>
-                      <td className="px-4 py-6 text-center text-slate-500" colSpan={5}>
-                        Nenhum contrato gerado ainda.
-                      </td>
-                    </tr>
-                  ) : null}
-                </tbody>
-              </table>
-            </div>
-          </section>
-        )}
-      </div>
-    </>
-  );
+  const canManage = role === "admin" || role === "manager";
+  const { data: allTemplateRows, error: templatesError } = canManage
+    ? await supabase.from("document_templates").select("*").eq("company_id",companyId).order("updated_at",{ascending:false})
+    : { data: [], error: null };
+  const allTemplates = (allTemplateRows ?? []) as DocumentTemplate[];
+  const variables = documentVariableCatalog.flatMap(group => group.variables);
+  const rows = [
+    ...contracts.map(contract => {
+      const client = clients.find(item => item.id === contract.client_id);
+      const template = templates.find(item => item.id === contract.template_id);
+      const link = <Link key="actions" href={`/documentos/gerados/${contract.id}`} className="font-semibold text-[var(--ns-primary)]">Visualizar</Link>;
+      return {id:contract.id,title:contract.title,search:[contract.title,client?.full_name,template?.name].join(" "),type:"Contrato",status:documentStatusLabels[contract.status],
+        cells:[<span key="title" className="font-semibold">{displayValue(contract.title)}</span>,"Contrato",displayValue(client?.full_name ?? null),formatDateTime(contract.created_at),<ReferenceBadge key="status">{documentStatusLabels[contract.status]}</ReferenceBadge>,link],
+        detail:<div key={contract.id} className="space-y-4"><ReferenceBadge>Contrato gerado</ReferenceBadge><ReferenceFacts items={[["Nome",contract.title],["Cliente",displayValue(client?.full_name ?? null)],["Template",displayValue(template?.name ?? null)],["Data",formatDateTime(contract.created_at)],["Status",documentStatusLabels[contract.status]]]} />{link}</div>};
+    }),
+    ...allTemplates.map(template => {
+      const typeLabel = documentTemplateTypes.find(item => item.value === template.document_type)?.label ?? template.document_type;
+      const links = <div key="actions" className="flex flex-wrap gap-3"><Link href={`/documentos/templates/${template.id}`} className="font-semibold text-[var(--ns-primary)]">Visualizar</Link>{canManage && <Link href={`/documentos/templates/${template.id}/editar`} className="font-semibold text-[var(--ns-primary)]">Editar</Link>}</div>;
+      return {id:template.id,title:template.name,search:[template.name,template.description,typeLabel].join(" "),type:"Template",status:template.is_active ? "Ativo" : "Inativo",
+        cells:[<div key="title"><p className="font-semibold">{template.name}</p><p className="mt-1 text-[10px] text-[var(--ns-text-secondary)]">{template.description}</p></div>,"Template",typeLabel,formatDateTime(template.updated_at ?? template.created_at),<ReferenceBadge key="status" tone={template.is_active ? "success" : "warning"}>{template.is_active ? "Ativo" : "Inativo"}</ReferenceBadge>,links],
+        detail:<div key={template.id} className="space-y-4"><ReferenceBadge>Template</ReferenceBadge><p className="text-xs text-[var(--ns-text-secondary)]">{template.description}</p><ReferenceFacts items={[["Tipo",typeLabel],["Status",template.is_active ? "Ativo" : "Inativo"],["Última edição",formatDateTime(template.updated_at ?? template.created_at)],["Arquivo",template.original_pdf_filename ?? template.original_docx_filename ?? "HTML"],["Modelo padrão",template.is_default ? "Sim" : "Não"]]} />{links}</div>};
+    })
+  ];
+  return <>
+    <PageHeader title="Gestão" description="Contratos e templates da operação." />
+    <div className="reference-page space-y-4 p-4 sm:p-6">
+      {(error || templatesError) && <p role="alert" className="text-sm text-[var(--ns-danger)]">Não foi possível carregar todos os contratos e templates. Os dados abaixo podem estar incompletos.</p>}
+      {!error && !templatesError && <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4"><ManagementMetric label="Contratos gerados" value={contracts.length} icon={FileText} tone="success" /><ManagementMetric label="Templates ativos" value={allTemplates.filter(template => template.is_active).length} icon={Files} /><ManagementMetric label="Clientes vinculados" value={clientIds.length} icon={Users} tone="warning" /><ManagementMetric label="Variáveis disponíveis" value={variables.length} icon={Braces} /></div>}
+      <ReferenceCollection title="Contratos e templates" detailTitle="Detalhes do contrato ou template" columns={["Nome","Tipo","Cliente / modelo","Última edição","Status","Ações"]} rows={rows} actions={canManage ? <Link href="/documentos/templates/novo" className="rounded-md bg-[var(--ns-primary)] px-4 py-2 text-xs font-semibold text-[var(--ns-primary-foreground)]">+ Novo template</Link> : undefined}>
+        <section className="ns-panel p-4"><h2 className="text-sm font-semibold">Organização e variáveis</h2><div className="mt-4 grid gap-4 sm:grid-cols-2">{canManage && <Link href="/documentos/templates" className="rounded-md border border-[var(--ns-border)] p-3 text-xs font-semibold text-[var(--ns-primary)]">Gerenciar templates</Link>}<details className="rounded-md border border-[var(--ns-border)] p-3"><summary className="text-xs font-semibold text-[var(--ns-primary)]">Variáveis dinâmicas</summary><div className="mt-3 max-h-60 overflow-y-auto space-y-2">{documentVariableCatalog.map(group => <div key={group.group}><h3 className="text-xs font-semibold">{group.group}</h3><p className="mt-1 break-words font-mono text-[10px] text-[var(--ns-text-secondary)]">{group.variables.map(variable => `{{${variable}}}`).join(" · ")}</p></div>)}</div></details></div></section>
+      </ReferenceCollection>
+    </div>
+  </>;
 }
+

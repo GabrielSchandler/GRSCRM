@@ -53,7 +53,7 @@ export default async function NovoClientePage({
         description="Cadastre os dados basicos do cliente. O vínculo com a empresa vem do usuário autenticado."
       />
       <div className="p-6">
-        <div className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+        <div>
           <ClientForm
             submitLabel="Cadastrar cliente"
             defaultValues={{

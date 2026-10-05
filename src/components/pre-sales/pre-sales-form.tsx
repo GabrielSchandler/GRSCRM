@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import type { ChangeEvent, ReactNode } from "react";
 import { useEffect, useState, useTransition } from "react";
 import { useFieldArray, useForm } from "react-hook-form";
+import { CheckCircle2, Circle, ClipboardList, FileText, Users } from "lucide-react";
 import type {
   FieldErrors,
   RegisterOptions,
@@ -86,10 +87,11 @@ const paymentMethodOptions = ["Pix", "Boleto", "Cartao"] as const;
 
 function FormSection({ title, description, children }: FormSectionProps) {
   return (
-    <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-      <div className="mb-5">
-        <h2 className="text-base font-semibold text-slate-950">{title}</h2>
-        <p className="mt-1 text-sm leading-6 text-slate-600">{description}</p>
+    <section className="rounded-lg border border-[var(--ns-border)] bg-[var(--ns-surface)] p-4">
+      <div className="mb-4 flex items-start gap-3">
+        <FileText className="h-8 w-8 shrink-0 rounded-lg bg-[color-mix(in_srgb,var(--ns-primary)_12%,transparent)] p-2 text-[var(--ns-primary)]" />
+        <div><h2 className="text-sm font-semibold text-[var(--ns-text)]">{title}</h2>
+        <p className="mt-1 text-xs leading-5 text-[var(--ns-text-secondary)]">{description}</p></div>
       </div>
       <div className="grid gap-5 md:grid-cols-2">{children}</div>
     </section>
@@ -289,6 +291,18 @@ export function PreSalesForm({
   const selectedPreSaleType = watch("pre_sale_type");
   const watchedPayments = watch("payments");
   const disabled = isSubmitting || isPending;
+  const summaryValues = watch();
+  const selectedClient = clients.find((client) => client.id === summaryValues.client_id);
+  const selectedConsultant = consultants.find((consultant) => consultant.id === summaryValues.consultant_user_id);
+  const statusIndex = ["lead", "pre_venda", "em_contato", "em_negociacao", "aprovado"].indexOf(summaryValues.status);
+  const checklist = [
+    { label: "Selecionar cliente", done: Boolean(summaryValues.client_id) },
+    { label: "Definir tipo de serviço", done: Boolean(summaryValues.service_type?.trim()) },
+    { label: "Informar financeira", done: Boolean(summaryValues.financer_name?.trim()) },
+    { label: "Adicionar valor do contrato", done: Boolean(summaryValues.contract_value && summaryValues.contract_value !== "0,00") },
+    { label: "Registrar negociação", done: Boolean(summaryValues.negotiation_details?.trim()) },
+  ];
+  const completed = checklist.filter((item) => item.done).length;
 
   useEffect(() => {
     watchedPayments?.forEach((payment, index) => {
@@ -378,13 +392,17 @@ export function PreSalesForm({
   }
 
   return (
-    <form className="space-y-6" onSubmit={handleSubmit(onValidSubmit)}>
+    <form className="pre-sale-edit-form grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_320px]" onSubmit={handleSubmit(onValidSubmit)}>
+      <div className="min-w-0 space-y-4">
+      <ol className="flex items-start justify-between gap-2 rounded-lg border border-[var(--ns-border)] bg-[var(--ns-surface)] p-5" aria-label="Etapas comerciais">
+        {["Novo lead", "Pré-venda", "Contato", "Negociação", "Aprovado"].map((label, index) => <li key={label} className="flex flex-1 flex-col items-center gap-2 text-center text-[10px] text-[var(--ns-text-secondary)]"><span className={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-semibold ${index <= statusIndex ? "bg-[var(--ns-primary)] text-[var(--ns-primary-foreground)]" : "bg-[var(--ns-surface-hover)]"}`}>{index < statusIndex ? <CheckCircle2 className="h-4 w-4" /> : index + 1}</span>{label}</li>)}
+      </ol>
       <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
         Obrigatoriedade alinhada com os contratos e recibos atuais enviados. Campos marcados como obrigatórios
         são usados diretamente nos documentos; os condicionais dependem do tipo da operação ou do bloco preenchido.
       </div>
       <FormSection
-        title="Cabecalho da pré-venda"
+        title="Informações principais"
         description="Identifique a operação, origem comercial e responsável pelo atendimento."
       >
         <div className="space-y-2 md:col-span-2">
@@ -1046,6 +1064,25 @@ export function PreSalesForm({
         </Link>
       </div>
 
+      </div>
+      <aside className="sticky top-4 max-h-[calc(100dvh-2rem)] space-y-4 overflow-y-auto">
+        <section className="rounded-lg border border-[var(--ns-border)] bg-[var(--ns-surface)] p-5">
+          <h2 className="flex items-center gap-2 text-sm font-semibold"><Users className="h-4 w-4 text-[var(--ns-primary)]" />Resumo da pré-venda</h2>
+          <p className="mt-5 break-words text-lg font-semibold">{selectedClient?.full_name ?? "Nova oportunidade"}</p>
+          <p className="mt-1 text-xs text-[var(--ns-text-secondary)]">{preSaleStatuses.find((status) => status.value === summaryValues.status)?.label ?? summaryValues.status}</p>
+          <dl className="mt-5 space-y-3 text-xs">{[
+            ["Tipo de serviço", summaryValues.service_type || "Não definido"],
+            ["Tipo de pré-venda", preSaleTypes.find((type) => type.value === summaryValues.pre_sale_type)?.label ?? "Não definido"],
+            ["Valor do contrato", summaryValues.contract_value ? `R$ ${summaryValues.contract_value}` : "Não informado"],
+            ["Origem / Mídia", summaryValues.media || "Não definida"],
+            ["Consultor", selectedConsultant ? resolveUserDisplayName(selectedConsultant, "Sem nome") : "Não atribuído"],
+            ["Financeira", summaryValues.financer_name || "Não informada"],
+          ].map(([label, value]) => <div key={label} className="flex justify-between gap-3"><dt className="text-[var(--ns-text-secondary)]">{label}</dt><dd className="max-w-[60%] break-words text-right font-medium">{value}</dd></div>)}</dl>
+          {selectedClient && <Link className="mt-5 block rounded-lg border border-[var(--ns-border)] p-2 text-center text-xs font-semibold hover:bg-[var(--ns-surface-hover)]" href={`/clientes/${selectedClient.id}`} onClick={(event) => { if (!confirmNavigation()) event.preventDefault(); }}>Ver cliente 360°</Link>}
+        </section>
+        <section className="rounded-lg border border-[var(--ns-border)] bg-[var(--ns-surface)] p-5"><h2 className="flex items-center gap-2 text-sm font-semibold"><ClipboardList className="h-4 w-4 text-[var(--ns-primary)]" />Checklist de preenchimento</h2><p className="mt-2 text-xs text-[var(--ns-text-secondary)]">{completed} de {checklist.length} concluídos</p><progress className="my-3 h-2 w-full accent-[var(--ns-success)]" value={completed} max={checklist.length} aria-label="Progresso do preenchimento" /><ul className="space-y-3">{checklist.map((item) => <li key={item.label} className="flex items-center gap-2 text-xs">{item.done ? <CheckCircle2 className="h-4 w-4 text-[var(--ns-success)]" /> : <Circle className="h-4 w-4 text-[var(--ns-text-secondary)]" />}{item.label}</li>)}</ul></section>
+        <section className="rounded-lg border border-[var(--ns-border)] bg-[var(--ns-surface)] p-5"><h2 className="text-sm font-semibold">Dados da oportunidade</h2><p className="mt-3 text-xs text-[var(--ns-text-secondary)]">Abertura: {openingDateLabel}</p><button type="submit" disabled={disabled} className="mt-5 w-full cursor-pointer rounded-lg bg-[var(--ns-primary)] p-3 text-sm font-semibold text-[var(--ns-primary-foreground)] disabled:opacity-50">{disabled ? "Salvando..." : submitLabel}</button></section>
+      </aside>
       <ChangeNoteModal
         isOpen={isChangeNoteModalOpen}
         title="Registrar alteração na pré-venda"

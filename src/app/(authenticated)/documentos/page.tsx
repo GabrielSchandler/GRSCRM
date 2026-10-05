@@ -1,5 +1,11 @@
+import { FileText, Files, AlertTriangle, Users } from "lucide-react";
+import { ManagementMetric } from "@/components/management/management-ui";
+import { ReferenceActions } from "@/components/newsec/reference-actions";
+import { ReferenceCollection } from "@/components/newsec/reference-collection";
+import { ReferenceFacts, ReferenceBadge } from "@/components/newsec/reference-ui";
 import Link from "next/link";
 import { DocumentDeleteButton } from "@/components/documents/document-delete-button";
+import { DocumentContentPreview } from "@/components/documents/document-content-preview";
 import { DocumentsNav } from "@/components/documents/documents-nav";
 import { PageHeader } from "@/components/layout/page-header";
 import { getCurrentUserContext } from "@/lib/auth/current-user";
@@ -115,16 +121,18 @@ export default async function DocumentosPage({ searchParams }: DocumentosPagePro
   const clientsMap = new Map(clients.map((client) => [client.id, client]));
   const creatorsMap = new Map(creators.map((creator) => [creator.id, creator]));
 
-  return (
-    <>
-      <PageHeader
-        title="Documentos"
-        description="Documentos gerados a partir das pré-vendas da empresa."
-      />
-      <div className="space-y-6 p-6">
-        <DocumentsNav />
 
-        <form className="grid gap-3 rounded-lg border border-slate-200 bg-white p-4 shadow-sm md:grid-cols-[220px_1fr_160px_160px_auto]">
+  return <>
+    <PageHeader title="Documentos" description="Documentos gerados, templates e arquivos operacionais da empresa." />
+    <div className="reference-page space-y-4 p-4 sm:p-6"><DocumentsNav />
+      {error ? <p role="alert" className="text-sm text-[var(--ns-danger)]">{error.message}</p> : <>
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <ManagementMetric label="Documentos carregados" value={documents.length} icon={FileText} />
+        <ManagementMetric label="Templates utilizados" value={templates.length} icon={Files} tone="success" />
+        <ManagementMetric label="PDFs pendentes / erros" value={documents.filter(d => d.pdf_error_message || d.status === "erro" || d.status === "pdf_error").length} icon={AlertTriangle} tone="danger" />
+        <ManagementMetric label="Clientes vinculados" value={clientIds.length} icon={Users} tone="success" />
+      </div>
+      <details className="ns-panel p-3" open={Boolean(params.type || params.client || params.from || params.to)}><summary className="text-xs font-semibold text-[var(--ns-primary)]">Filtros por cliente e período</summary><form className="grid gap-3 rounded-lg border border-slate-200 bg-white p-4 shadow-sm md:grid-cols-[220px_1fr_160px_160px_auto]">
           <select
             name="type"
             defaultValue={params.type ?? ""}
@@ -167,114 +175,23 @@ export default async function DocumentosPage({ searchParams }: DocumentosPagePro
           >
             Filtrar
           </button>
-        </form>
+        </form></details>
 
-        {error ? (
-          <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-            {error.message}
-          </div>
-        ) : (
-          <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[980px] border-collapse text-left text-sm">
-                <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
-                  <tr>
-                    <th className="px-4 py-3 font-semibold">Título</th>
-                    <th className="px-4 py-3 font-semibold">Tipo</th>
-                    <th className="px-4 py-3 font-semibold">Cliente</th>
-                    <th className="px-4 py-3 font-semibold">Template</th>
-                    <th className="px-4 py-3 font-semibold">Fonte</th>
-                    <th className="px-4 py-3 font-semibold">Status</th>
-                    <th className="px-4 py-3 font-semibold">Data</th>
-                    <th className="px-4 py-3 font-semibold">Criado por</th>
-                    <th className="px-4 py-3 font-semibold">Ações</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {documents.map((document) => {
-                    const template = document.template_id
-                      ? templatesMap.get(document.template_id)
-                      : undefined;
-                    const client = document.client_id
-                      ? clientsMap.get(document.client_id)
-                      : undefined;
-                    const creator = document.created_by
-                      ? creatorsMap.get(document.created_by)
-                      : undefined;
 
-                    return (
-                      <tr key={document.id} className="transition hover:bg-slate-50">
-                        <td className="px-4 py-3 font-medium text-slate-900">
-                          {displayValue(document.title)}
-                        </td>
-                        <td className="px-4 py-3 text-slate-700">
-                          {formatTemplateType(document.document_type)}
-                        </td>
-                        <td className="px-4 py-3 text-slate-700">
-                          {displayValue(client?.full_name ?? null)}
-                        </td>
-                        <td className="px-4 py-3 text-slate-700">
-                          {displayValue(template?.name ?? null)}
-                        </td>
-                        <td className="px-4 py-3 text-slate-700">
-                          {document.render_source === "pdf"
-                            ? "PDF"
-                            : document.render_source === "docx"
-                              ? "DOCX"
-                              : "HTML"}
-                        </td>
-                        <td className="px-4 py-3 text-slate-700">
-                          {document.pdf_error_message
-                            ? "DOCX gerado, PDF pendente"
-                            : documentStatusLabels[document.status] ?? document.status}
-                        </td>
-                        <td className="px-4 py-3 text-slate-700">
-                          {formatDateTime(document.created_at)}
-                        </td>
-                        <td className="px-4 py-3 text-slate-700">
-                          {resolveUserDisplayName(creator)}
-                        </td>
-                        <td className="px-4 py-3">
-                          <div className="flex flex-wrap gap-2">
-                          <Link
-                            href={`/documentos/gerados/${document.id}`}
-                            className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-                          >
-                            Visualizar
-                          </Link>
-                          {document.render_source === "html" ? (
-                            <Link
-                              href={`/documentos/gerados/${document.id}/imprimir?print=1`}
-                              target="_blank"
-                              className="rounded-lg border border-teal-300 bg-teal-50 px-3 py-2 text-sm font-semibold text-teal-800 transition hover:bg-teal-100"
-                            >
-                              PDF HTML
-                            </Link>
-                          ) : null}
-                          {canDeleteDocuments ? (
-                            <DocumentDeleteButton
-                              documentId={document.id}
-                              variant="inline"
-                            />
-                          ) : null}
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                  {!documents.length ? (
-                    <tr>
-                      <td className="px-4 py-6 text-center text-slate-500" colSpan={9}>
-                        Nenhum documento gerado ainda.
-                      </td>
-                    </tr>
-                  ) : null}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-      </div>
-    </>
-  );
+      <ReferenceCollection title="Documentos gerados" detailTitle="Detalhes do documento" columns={["Nome", "Cliente", "Tipo", "Criado por", "Data de criação", "Status", "Ações"]}
+        rows={documents.map(document => {
+          const typeLabel = formatTemplateType(document.document_type);
+          const statusLabel = document.pdf_error_message ? "DOCX gerado, PDF pendente" : documentStatusLabels[document.status];
+          const clientName = displayValue(clientsMap.get(document.client_id ?? "")?.full_name ?? null);
+          const creatorName = resolveUserDisplayName(creatorsMap.get(document.created_by ?? ""));
+          const links = <div className="flex flex-col items-start gap-2"><Link href={`/documentos/gerados/${document.id}`} className="text-[var(--ns-primary)] font-semibold">Visualizar</Link>{document.render_source === "html" && <Link href={`/documentos/gerados/${document.id}/imprimir?print=1`} target="_blank" className="text-[var(--ns-primary)]">PDF HTML</Link>}{canDeleteDocuments && <DocumentDeleteButton documentId={document.id} variant="inline" />}</div>;
+          return { id: document.id, title: document.title, search: [document.title, clientName, creatorName].join(" "), type: typeLabel, status: statusLabel,
+            cells: [<span key="name" className="line-clamp-2 font-semibold">{document.title}</span>, clientName, typeLabel, creatorName, <span key="date" className="whitespace-nowrap">{formatDateTime(document.created_at)}</span>, <ReferenceBadge key="status" tone={document.status === "gerado" && !document.pdf_error_message ? "success" : "warning"}>{statusLabel}</ReferenceBadge>, <ReferenceActions key="actions">{links}</ReferenceActions>],
+            detail: <div key={document.id} className="space-y-4"><ReferenceBadge tone={document.status === "gerado" && !document.pdf_error_message ? "success" : "warning"}>{statusLabel}</ReferenceBadge>{document.render_source === "html" ? <DocumentContentPreview html={document.rendered_content_html} /> : <p className="text-xs text-[var(--ns-text-secondary)]">Arquivo {document.render_source?.toUpperCase() ?? "original"} disponível na visualização do documento.</p>}<ReferenceFacts items={[["Nome", document.title], ["Cliente", clientName], ["Tipo", typeLabel], ["Template", displayValue(templatesMap.get(document.template_id)?.name ?? null)], ["Criado por", creatorName], ["Data de criação", formatDateTime(document.created_at)], ["Formato", document.render_source?.toUpperCase() ?? "HTML"]]} />{links}</div>
+          };
+        })} />
+      </>}
+    </div>
+  </>;
 }
+

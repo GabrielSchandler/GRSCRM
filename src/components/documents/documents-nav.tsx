@@ -1,20 +1,13 @@
+"use client";
+
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 
 export function DocumentsNav() {
-  return (
-    <div className="flex flex-wrap gap-2">
-      <Link
-        href="/documentos"
-        className="rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-      >
-        Documentos gerados
-      </Link>
-      <Link
-        href="/documentos/templates"
-        className="rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-      >
-        Templates
-      </Link>
-    </div>
-  );
+  const pathname = usePathname();
+  const tabs = [{ href: "/documentos", label: "Gerados" }, { href: "/documentos/templates", label: "Templates" }];
+  return <nav aria-label="Documentos" className="flex gap-2 border-b border-[var(--ns-border)]">{tabs.map(tab => {
+    const active = pathname === tab.href;
+    return <Link key={tab.href} href={tab.href} aria-current={active ? "page" : undefined} className={`border-b-2 px-4 py-3 text-xs font-semibold ${active ? "border-[var(--ns-primary)] text-[var(--ns-primary)]" : "border-transparent text-[var(--ns-text-secondary)]"}`}>{tab.label}</Link>;
+  })}</nav>;
 }

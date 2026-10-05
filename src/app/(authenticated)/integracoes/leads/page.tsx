@@ -1,3 +1,8 @@
+import { Link2, FileSpreadsheet, Users, Activity } from "lucide-react";
+import { ManagementMetric } from "@/components/management/management-ui";
+import { RevealDetailsButton } from "@/components/newsec/reveal-details-button";
+import { ReferenceCollection } from "@/components/newsec/reference-collection";
+import { ReferenceFacts, ReferenceBadge, ReferenceTabs } from "@/components/newsec/reference-ui";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { PageHeader } from "@/components/layout/page-header";
@@ -125,189 +130,47 @@ export default async function LeadSourcesPage({ searchParams }: LeadSourcesPageP
   const sources = (data ?? []) as LeadSource[];
   const banner = getBannerMessage(params);
 
-  return (
-    <>
-      <PageHeader
-        title="Fontes de leads"
-        description="Cadastre as planilhas do Google Sheets que cada empresa usa para receber leads do marketing."
-      />
-      <div className="space-y-6 p-6">
-        {banner ? (
-          <div
-            className={`rounded-lg border px-4 py-3 text-sm ${
-              banner.tone === "success"
-                ? "border-teal-200 bg-teal-50 text-teal-800"
-                : "border-red-200 bg-red-50 text-red-700"
-            }`}
-          >
-            {banner.text}
-          </div>
-        ) : null}
 
-        <section className="rounded-lg border border-slate-200 bg-white shadow-sm">
-          <div className="border-b border-slate-200 p-6">
-            <p className="text-xs font-semibold uppercase tracking-wide text-teal-700">
-              Configuração
-            </p>
-            <h2 className="mt-2 text-xl font-semibold text-slate-950">
-              Nova fonte do Google Sheets
-            </h2>
-            <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
-              A planilha precisa estar compartilhada para leitura por link. O CRM
-              importa apenas linhas novas e guarda a origem para evitar duplicidade.
-              Você não precisa preencher o ID da aba na maioria dos casos: se o
-              link estiver aberto na aba correta, o CRM tenta identificar isso
-              automaticamente.
-            </p>
-          </div>
-
-          <form action={createLeadSourceAction} className="grid gap-4 p-6 lg:grid-cols-2">
-            <Field
-              label="Nome da fonte"
-              name="name"
-              required
-              placeholder="Ex.: Trafego Kairos - Veiculos"
-            />
-            <Field
-              label="Link da planilha"
-              name="sheet_url"
-              required
-              placeholder="https://docs.google.com/spreadsheets/d/..."
-            />
-            <Field
-              label="Primeira linha com lead"
-              name="start_row"
-              type="number"
-              defaultValue={2}
-              placeholder="2"
-            />
-            <details className="rounded-lg border border-slate-200 bg-slate-50 p-4 lg:col-span-2">
-              <summary className="cursor-pointer text-sm font-semibold text-slate-800">
-                Configuração avancada da aba
-              </summary>
-              <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,360px)_1fr]">
-                <Field
-                  label="ID numérico da aba"
-                  name="sheet_gid"
-                  placeholder="Opcional. Ex.: 0 ou 123456789"
-                />
-                <p className="text-sm leading-6 text-slate-600">
-                  Este campo não é o nome da página/aba. Ele é o número que aparece
-                  no final do link como <span className="font-mono">#gid=...</span>.
-                  Se ficar em branco, o CRM usa a primeira aba ou a aba que já está
-                  no link informado.
-                </p>
-              </div>
-            </details>
-            <div className="grid gap-4 sm:grid-cols-3 lg:col-span-2">
-              <Field label="Coluna do nome" name="name_column" defaultValue="A" required />
-              <Field label="Coluna do telefone" name="phone_column" defaultValue="B" />
-              <Field label="Coluna do email" name="email_column" placeholder="Ex.: C" />
-              <Field label="Coluna do CPF" name="cpf_column" placeholder="Ex.: D" />
-              <Field label="Coluna da campanha" name="campaign_column" placeholder="Ex.: E" />
-              <Field label="Coluna de observações" name="notes_column" placeholder="Ex.: F" />
-            </div>
-            <p className="text-sm leading-6 text-slate-600 lg:col-span-2">
-              Dica: se a planilha tiver cabecalhos como Nome, Telefone, Mídia e
-              Observação, o CRM tenta identificar as colunas automaticamente,
-              mesmo que a configuração acima esteja diferente.
-            </p>
-            <div className="lg:col-span-2">
-              <button
-                type="submit"
-                className="rounded-lg bg-teal-700 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-teal-800"
-              >
-                Cadastrar fonte
-              </button>
-            </div>
-          </form>
-        </section>
-
-        <section className="rounded-lg border border-slate-200 bg-white shadow-sm">
-          <div className="flex flex-col gap-3 border-b border-slate-200 p-6 md:flex-row md:items-center md:justify-between">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-teal-700">
-                Planilhas cadastradas
-              </p>
-              <h2 className="mt-2 text-xl font-semibold text-slate-950">
-                {sources.length} fonte(s)
-              </h2>
-            </div>
-            <Link
-              href="/leads"
-              className="inline-flex items-center justify-center rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-            >
-              Ir para distribuição
-            </Link>
-          </div>
-
-          {error ? (
-            <div className="m-6 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-              {error.message}
-            </div>
-          ) : sources.length ? (
-            <div className="divide-y divide-slate-100">
-              {sources.map((source) => (
-                <article key={source.id} className="grid gap-4 p-6 lg:grid-cols-[1fr_auto]">
-                  <div className="space-y-4">
-                    <div>
-                      <div className="flex flex-wrap items-center gap-2">
-                        <h3 className="text-base font-semibold text-slate-950">
-                          {source.name}
-                        </h3>
-                        <span
-                          className={`rounded-full border px-2 py-0.5 text-xs font-semibold ${
-                            source.is_active
-                              ? "border-teal-200 bg-teal-50 text-teal-800"
-                              : "border-slate-200 bg-slate-100 text-slate-600"
-                          }`}
-                        >
-                          {source.is_active ? "Ativa" : "Pausada"}
-                        </span>
-                      </div>
-                      <p className="mt-2 break-all text-sm text-slate-600">
-                        {source.sheet_url}
-                      </p>
-                    </div>
-
-                    <dl className="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
-                      <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-                        <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                          Aba / linha
-                        </dt>
-                        <dd className="mt-1 text-slate-950">
-                          {source.sheet_gid ? `GID ${source.sheet_gid}` : "Aba automática"} /
-                          linha {source.start_row ?? 2}
-                        </dd>
-                      </div>
-                      <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-                        <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                          Colunas
-                        </dt>
-                        <dd className="mt-1 text-slate-950">
-                          Nome {source.name_column ?? "A"} | Tel.{" "}
-                          {displayValue(source.phone_column)}
-                        </dd>
-                      </div>
-                      <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-                        <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                          Ultima verificacao
-                        </dt>
-                        <dd className="mt-1 text-slate-950">
-                          {formatDateTime(source.last_checked_at)}
-                        </dd>
-                      </div>
-                      <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-                        <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                          Criada em
-                        </dt>
-                        <dd className="mt-1 text-slate-950">
-                          {formatDateTime(source.created_at)}
-                        </dd>
-                      </div>
-                    </dl>
-
-                    <details className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+  const queueResult = await adminClient.from("leads").select("id", { count: "exact", head: true }).eq("company_id", companyId).eq("status", "novo");
+  return <>
+    <PageHeader title="Leads" description="Fontes de captação, distribuição e conexões com Google Sheets." />
+    <div className="reference-page space-y-4 p-4 sm:p-6">
+      <ReferenceTabs items={[{label:"Distribuição",href:"/leads"},{label:"Fontes",href:"/integracoes/leads",active:true},{label:"Google Sheets",href:"#conexoes"}]} />
+      {banner && <p role="status" className={banner.tone === "error" ? "text-[var(--ns-danger)]" : "text-[var(--ns-success)]"}>{banner.text}</p>}
+      {error ? <p role="alert" className="text-[var(--ns-danger)]">{error.message}</p> : <>
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <ManagementMetric label="Fontes cadastradas" value={sources.length} icon={Link2} />
+        <ManagementMetric label="Fontes ativas" value={sources.filter(s => s.is_active).length} icon={Activity} tone="success" />
+        <ManagementMetric label="Planilhas configuradas" value={sources.filter(s => Boolean(s.sheet_url)).length} icon={FileSpreadsheet} tone="success" />
+        <ManagementMetric label="Leads na fila" value={queueResult.error ? "Indisponível" : queueResult.count ?? 0} icon={Users} tone="warning" />
+      </div>
+      <ReferenceCollection title="Fontes de leads" detailTitle="Conexão e distribuição" columns={["Nome da fonte", "Tipo", "Distribuição", "Status", "Última verificação", "Ações"]} actions={<RevealDetailsButton targetId="nova-fonte" className="rounded-md bg-[var(--ns-primary)] px-4 py-2 text-xs font-semibold text-[var(--ns-primary-foreground)]">+ Nova fonte</RevealDetailsButton>} rows={sources.map(source => ({
+        id: source.id, title: source.name, search: source.name, type:"Google Sheets", status:source.is_active ? "Ativa" : "Pausada",
+        cells:[<span key="name" className="font-semibold">{source.name}</span>, "Google Sheets", <Link key="distribution" href="/leads" className="text-[var(--ns-primary)]">Ver distribuição</Link>, <ReferenceBadge key="status" tone={source.is_active ? "success" : "warning"}>{source.is_active ? "Ativa" : "Pausada"}</ReferenceBadge>, formatDateTime(source.last_checked_at), <a key="connection" href="#conexoes" className="text-[var(--ns-primary)]">Conexão</a>],
+        detail: <div key={source.id} className="space-y-4"><ReferenceBadge tone={source.is_active ? "success" : "warning"}>{source.is_active ? "Ativa" : "Pausada"}</ReferenceBadge><ReferenceFacts items={[["Planilha",<a key="sheet" href={source.sheet_url} target="_blank" rel="noreferrer" className="break-all text-[var(--ns-primary)]">{source.sheet_url}</a>],["Aba",source.sheet_gid ? `GID ${source.sheet_gid}` : "Automática"],["Primeira linha",source.start_row ?? 2],["Coluna do nome",source.name_column ?? "A"],["Coluna do telefone",displayValue(source.phone_column)],["Última verificação",formatDateTime(source.last_checked_at)]]} /><div className="flex flex-wrap gap-2">                    <form action={toggleLeadSourceAction}>
+                      <input type="hidden" name="source_id" value={source.id} />
+                      <input
+                        type="hidden"
+                        name="next_active"
+                        value={source.is_active ? "false" : "true"}
+                      />
+                      <button
+                        type="submit"
+                        className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                      >
+                        {source.is_active ? "Pausar" : "Ativar"}
+                      </button>
+                    </form>
+                    <form action={deleteLeadSourceAction}>
+                      <input type="hidden" name="source_id" value={source.id} />
+                      <button
+                        type="submit"
+                        className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700 transition hover:bg-red-100"
+                      >
+                        Excluir
+                      </button>
+                    </form>
+</div>                    <details className="rounded-lg border border-slate-200 bg-slate-50 p-4">
                       <summary className="cursor-pointer text-sm font-semibold text-slate-800">
                         Editar conexão
                       </summary>
@@ -390,46 +253,72 @@ export default async function LeadSourcesPage({ searchParams }: LeadSourcesPageP
                           </button>
                         </div>
                       </form>
-                    </details>
-                  </div>
-
-                  <div className="flex flex-wrap items-start gap-2 lg:justify-end">
-                    <form action={toggleLeadSourceAction}>
-                      <input type="hidden" name="source_id" value={source.id} />
-                      <input
-                        type="hidden"
-                        name="next_active"
-                        value={source.is_active ? "false" : "true"}
-                      />
-                      <button
-                        type="submit"
-                        className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-                      >
-                        {source.is_active ? "Pausar" : "Ativar"}
-                      </button>
-                    </form>
-                    <form action={deleteLeadSourceAction}>
-                      <input type="hidden" name="source_id" value={source.id} />
-                      <button
-                        type="submit"
-                        className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700 transition hover:bg-red-100"
-                      >
-                        Excluir
-                      </button>
-                    </form>
-                  </div>
-                </article>
-              ))}
-            </div>
-          ) : (
-            <div className="p-6">
-              <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 px-4 py-8 text-center text-sm text-slate-600">
-                Nenhuma fonte cadastrada ainda.
+                    </details></div>
+      }))}>
+        <section id="conexoes" className="ns-panel p-4"><h2 className="mb-3 text-sm font-semibold">Distribuição de leads</h2><p className="text-xs text-[var(--ns-text-secondary)]">A distribuição manual e por rotação utiliza os consultores selecionados na fila.</p><Link href="/leads" className="mt-3 inline-flex text-xs font-semibold text-[var(--ns-primary)]">Ver fila e distribuir</Link></section>
+      </ReferenceCollection>
+      </>}
+      <details id="nova-fonte" className="ns-panel p-4"><summary className="text-sm font-semibold">Nova fonte do Google Sheets</summary>          <form action={createLeadSourceAction} className="grid gap-4 p-6 lg:grid-cols-2">
+            <Field
+              label="Nome da fonte"
+              name="name"
+              required
+              placeholder="Ex.: Trafego Kairos - Veiculos"
+            />
+            <Field
+              label="Link da planilha"
+              name="sheet_url"
+              required
+              placeholder="https://docs.google.com/spreadsheets/d/..."
+            />
+            <Field
+              label="Primeira linha com lead"
+              name="start_row"
+              type="number"
+              defaultValue={2}
+              placeholder="2"
+            />
+            <details className="rounded-lg border border-slate-200 bg-slate-50 p-4 lg:col-span-2">
+              <summary className="cursor-pointer text-sm font-semibold text-slate-800">
+                Configuração avancada da aba
+              </summary>
+              <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,360px)_1fr]">
+                <Field
+                  label="ID numérico da aba"
+                  name="sheet_gid"
+                  placeholder="Opcional. Ex.: 0 ou 123456789"
+                />
+                <p className="text-sm leading-6 text-slate-600">
+                  Este campo não é o nome da página/aba. Ele é o número que aparece
+                  no final do link como <span className="font-mono">#gid=...</span>.
+                  Se ficar em branco, o CRM usa a primeira aba ou a aba que já está
+                  no link informado.
+                </p>
               </div>
+            </details>
+            <div className="grid gap-4 sm:grid-cols-3 lg:col-span-2">
+              <Field label="Coluna do nome" name="name_column" defaultValue="A" required />
+              <Field label="Coluna do telefone" name="phone_column" defaultValue="B" />
+              <Field label="Coluna do email" name="email_column" placeholder="Ex.: C" />
+              <Field label="Coluna do CPF" name="cpf_column" placeholder="Ex.: D" />
+              <Field label="Coluna da campanha" name="campaign_column" placeholder="Ex.: E" />
+              <Field label="Coluna de observações" name="notes_column" placeholder="Ex.: F" />
             </div>
-          )}
-        </section>
-      </div>
-    </>
-  );
+            <p className="text-sm leading-6 text-slate-600 lg:col-span-2">
+              Dica: se a planilha tiver cabecalhos como Nome, Telefone, Mídia e
+              Observação, o CRM tenta identificar as colunas automaticamente,
+              mesmo que a configuração acima esteja diferente.
+            </p>
+            <div className="lg:col-span-2">
+              <button
+                type="submit"
+                className="rounded-lg bg-teal-700 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-teal-800"
+              >
+                Cadastrar fonte
+              </button>
+            </div>
+          </form></details>
+    </div>
+  </>;
 }
+

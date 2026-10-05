@@ -10,6 +10,42 @@ import {
 } from "@/lib/company/platform-settings";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getHomeForRole } from "@/lib/workspace";
+import { revalidatePath } from "next/cache";
+
+type LifecycleResult = { error: string; success: string };
+
+export async function changeCompanyLifecycleAction(_previous: LifecycleResult, formData: FormData): Promise<LifecycleResult> {
+  const context = await getCurrentUserContext();
+  if (!context.isPlatformOwner) return { error: "Acesso exclusivo do operador da plataforma.", success: "" };
+  const parsed = z.object({ company_id: z.string().uuid(), operation: z.enum(["block", "unblock", "archive", "restore"]), confirmation: z.string().trim().min(1) }).safeParse(Object.fromEntries(formData));
+  if (!parsed.success) return { error: "Confira a empresa e a confirmação.", success: "" };
+  const { company_id: id, operation, confirmation } = parsed.data;
+  const admin = createAdminClient();
+  const { data: company, error } = await admin.from("companies").select("id, trade_name, legal_name").eq("id", id).maybeSingle();
+  if (error || !company) return { error: "Empresa não encontrada.", success: "" };
+  const name = company.trade_name?.trim() || company.legal_name?.trim() || "Empresa sem nome";
+  if (confirmation !== name) return { error: "O nome digitado não corresponde ao da empresa.", success: "" };
+  const { count: masters, error: ownerError } = await admin.from("user_profiles").select("id", { count: "exact", head: true }).eq("company_id", id).eq("is_platform_owner", true);
+  if (ownerError || masters) return { error: "Não é permitido alterar o ciclo de vida da empresa do operador master.", success: "" };
+  if (operation === "archive" || operation === "restore") {
+    const { error: lifecycleError } = await admin.rpc("set_company_archive", { target_company: id, restore_company: operation === "restore", actor_profile: context.userProfileId });
+    if (lifecycleError) return { error: "Não foi possível alterar a empresa. Confirme a aplicação do SQL company-lifecycle e o prazo de recuperação.", success: "" };
+  } else {
+    const { data: lifecycle, error: lifecycleError } = await admin.from("company_lifecycle").select("company_id").eq("company_id", id).maybeSingle();
+    if (lifecycle) return { error: "Use Restaurar empresa para recuperar uma empresa excluída.", success: "" };
+    if (lifecycleError && !["PGRST205", "42P01"].includes(lifecycleError.code)) return { error: "Não foi possível verificar o estado de exclusão.", success: "" };
+    const { data: existingSettings, error: readError } = await admin.from("company_platform_settings").select("company_id").eq("company_id", id).maybeSingle();
+    if (readError) return { error: "Não foi possível consultar as configurações da empresa.", success: "" };
+    const statusPayload = { status: operation === "block" ? "suspended" : "active", updated_at: new Date().toISOString(), updated_by: context.userProfileId };
+    const { error: statusError } = existingSettings
+      ? await admin.from("company_platform_settings").update(statusPayload).eq("company_id", id)
+      : await admin.from("company_platform_settings").insert({ ...defaultCompanyPlatformSettings(id), ...statusPayload });
+    if (statusError) return { error: "Não foi possível atualizar o bloqueio da empresa.", success: "" };
+  }
+  revalidatePath("/empresas");
+  revalidatePath(`/empresas/${id}`);
+  return { error: "", success: operation === "archive" ? "Empresa excluída com recuperação por três meses." : operation === "restore" ? "Empresa restaurada." : operation === "block" ? "Empresa bloqueada." : "Empresa desbloqueada." };
+}
 
 const optionalText = z
   .union([z.string(), z.null(), z.undefined()])
@@ -144,6 +180,9 @@ export async function updateCompanyPlatformSettingsAction(formData: FormData) {
 
   const adminClient = createAdminClient();
   const now = new Date().toISOString();
+  const { data: archived, error: archivedError } = await adminClient.from("company_lifecycle").select("company_id").eq("company_id", parsed.data.company_id).maybeSingle();
+  if (archived) redirectSettingsWithError(parsed.data.company_id, "Restaure a empresa pelo painel master antes de alterar suas configurações.");
+  if (archivedError && !["PGRST205", "42P01"].includes(archivedError.code)) redirectSettingsWithError(parsed.data.company_id, "Não foi possível verificar o estado de exclusão.");
   const { user_license_limit: licenseLimit, ...settingsPayload } = parsed.data;
 
   const { error: companyError } = await adminClient

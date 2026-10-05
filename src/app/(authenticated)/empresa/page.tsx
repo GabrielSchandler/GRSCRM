@@ -69,10 +69,10 @@ export default async function EmpresaPage({ searchParams }: EmpresaPageProps) {
   return (
     <>
       <PageHeader
-        title="Empresa"
+        title="Gestão"
         description="Configure os dados institucionais da empresa, a identidade visual e as informações usadas nos documentos."
       />
-      <div className="space-y-6 p-6">
+      <div className="management-page space-y-6 p-4 sm:p-6">
         {success ? (
           <div className="rounded-lg border border-teal-200 bg-teal-50 px-4 py-3 text-sm text-teal-800">
             {success}
@@ -112,7 +112,7 @@ export default async function EmpresaPage({ searchParams }: EmpresaPageProps) {
               }}
             />
 
-            <div className="space-y-6">
+            <div className="space-y-6 lg:sticky lg:top-4 lg:self-start">
               <CompanyLogoPanel
                 logoUrl={logoUrl}
                 logoFileName={company.logo_file_name}

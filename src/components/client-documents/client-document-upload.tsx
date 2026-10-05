@@ -190,19 +190,19 @@ export function ClientDocumentUpload({
 
   return (
     <form
-      className="space-y-4 rounded-lg border border-slate-200 bg-white p-5 shadow-sm"
+      className="space-y-4 rounded-[10px] border border-[var(--ns-border)] bg-[var(--ns-surface)] p-5 shadow-none"
       onSubmit={handleSubmit}
     >
       <div>
-        <h3 className="text-sm font-semibold text-slate-950">Adicionar documento em massa</h3>
-        <p className="mt-1 text-sm text-slate-600">{hintText}</p>
+        <h3 className="text-sm font-semibold text-[var(--ns-text)]">Adicionar documento em massa</h3>
+        <p className="mt-1 text-sm text-[var(--ns-muted)]">{hintText}</p>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2">
         {fixedDocumentType ? (
           <div className="space-y-2">
             <FormFieldLabel label="Tipo do documento" requirement="required" />
-            <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-semibold text-slate-800">
+            <div className="rounded-[8px] border border-[var(--ns-border)] bg-[var(--ns-surface-alt)] px-3 py-2.5 text-sm font-semibold text-[var(--ns-text)]">
               {selectedDocumentTypeLabel}
             </div>
           </div>
@@ -217,7 +217,7 @@ export function ClientDocumentUpload({
               id="document_type"
               value={documentType}
               disabled={isPending}
-              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none transition focus:border-teal-600 focus:ring-2 focus:ring-teal-600/15"
+              className="w-full cursor-pointer rounded-[8px] border border-[var(--ns-border)] bg-[var(--ns-surface-alt)] px-3 py-2.5 text-sm text-[var(--ns-text)] outline-none transition focus:border-[var(--ns-primary)] focus:ring-2 focus:ring-[color-mix(in_srgb,var(--ns-primary)_18%,transparent)]"
               onChange={(event) =>
                 setDocumentType(event.target.value as (typeof clientDocumentTypes)[number]["value"])
               }
@@ -243,7 +243,7 @@ export function ClientDocumentUpload({
             multiple
             disabled={isPending}
             accept={clientDocumentAcceptedInputTypes}
-            className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 file:mr-3 file:rounded-lg file:border-0 file:bg-slate-100 file:px-3 file:py-2 file:text-sm file:font-semibold file:text-slate-700 hover:file:bg-slate-200"
+            className="w-full cursor-pointer rounded-[8px] border border-[var(--ns-border)] bg-[var(--ns-surface-alt)] px-3 py-2 text-sm text-[var(--ns-text)] file:mr-3 file:cursor-pointer file:rounded-[6px] file:border-0 file:bg-[var(--ns-primary)] file:px-3 file:py-2 file:text-sm file:font-semibold file:text-white hover:file:opacity-90"
             onChange={(event) => setFiles(Array.from(event.target.files ?? []))}
           />
           {files.length ? (
@@ -266,7 +266,7 @@ export function ClientDocumentUpload({
               value={selectedPreSaleId}
               disabled={isPending}
               onChange={(event) => setSelectedPreSaleId(event.target.value)}
-              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none transition focus:border-teal-600 focus:ring-2 focus:ring-teal-600/15"
+              className="w-full rounded-[8px] border border-[var(--ns-border)] bg-[var(--ns-surface-alt)] px-3 py-2.5 text-sm text-[var(--ns-text)] outline-none transition focus:border-[var(--ns-primary)] focus:ring-2 focus:ring-[color-mix(in_srgb,var(--ns-primary)_18%,transparent)]"
             >
               <option value="">Selecione uma pré-venda</option>
               {preSales.map((item) => (
@@ -285,7 +285,7 @@ export function ClientDocumentUpload({
             id="title"
             value={title}
             disabled={isPending}
-            className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none transition focus:border-teal-600 focus:ring-2 focus:ring-teal-600/15"
+            className="w-full rounded-[8px] border border-[var(--ns-border)] bg-[var(--ns-surface-alt)] px-3 py-2.5 text-sm text-[var(--ns-text)] outline-none transition focus:border-[var(--ns-primary)] focus:ring-2 focus:ring-[color-mix(in_srgb,var(--ns-primary)_18%,transparent)]"
             placeholder="Opcional para envio único. Em massa, o nome do arquivo vira título."
             onChange={(event) => setTitle(event.target.value)}
           />
@@ -301,7 +301,7 @@ export function ClientDocumentUpload({
             id="description"
             value={description}
             disabled={isPending}
-            className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none transition focus:border-teal-600 focus:ring-2 focus:ring-teal-600/15"
+            className="w-full rounded-[8px] border border-[var(--ns-border)] bg-[var(--ns-surface-alt)] px-3 py-2.5 text-sm text-[var(--ns-text)] outline-none transition focus:border-[var(--ns-primary)] focus:ring-2 focus:ring-[color-mix(in_srgb,var(--ns-primary)_18%,transparent)]"
             placeholder="Observação opcional"
             onChange={(event) => setDescription(event.target.value)}
           />
@@ -309,20 +309,20 @@ export function ClientDocumentUpload({
       </div>
 
       {selectedDocumentType === "extrajudicial" ? (
-        <section className="rounded-lg border border-teal-200 bg-teal-50/60 p-4">
+        <section className="rounded-[8px] border border-[color-mix(in_srgb,var(--ns-primary)_30%,var(--ns-border))] bg-[color-mix(in_srgb,var(--ns-primary)_8%,var(--ns-surface))] p-4">
           <div className="flex items-start gap-3">
-            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-white text-teal-700 shadow-sm">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-[var(--ns-surface)] text-[var(--ns-primary)] shadow-sm">
               <ShieldCheck className="h-5 w-5" />
             </span>
             <div>
-              <h4 className="text-sm font-semibold text-slate-950">Acesso do cliente</h4>
-              <p className="mt-1 text-xs leading-5 text-slate-600">
+              <h4 className="text-sm font-semibold text-[var(--ns-text)]">Acesso do cliente</h4>
+              <p className="mt-1 text-xs leading-5 text-[var(--ns-muted)]">
                 Cada opção solicitada ficará pendente até a aprovação da Gestão.
               </p>
             </div>
           </div>
           <div className="mt-4 grid gap-3 md:grid-cols-2">
-            <label className="flex cursor-pointer items-start gap-3 rounded-md border border-slate-200 bg-white p-3">
+            <label className="flex cursor-pointer items-start gap-3 rounded-md border border-[var(--ns-border)] bg-[var(--ns-surface)] p-3 transition hover:bg-[var(--ns-surface-alt)]">
               <input
                 type="checkbox"
                 checked={clientVisibilityRequested}
@@ -335,16 +335,16 @@ export function ClientDocumentUpload({
                 className="mt-1 h-4 w-4 rounded border-slate-300 text-teal-700 focus:ring-teal-600"
               />
               <span>
-                <span className="flex items-center gap-2 text-sm font-semibold text-slate-950">
+                <span className="flex items-center gap-2 text-sm font-semibold text-[var(--ns-text)]">
                   <Eye className="h-4 w-4 text-teal-700" />
                   Mostrar que o arquivo existe
                 </span>
-                <span className="mt-1 block text-xs leading-5 text-slate-500">
+                <span className="mt-1 block text-xs leading-5 text-[var(--ns-muted)]">
                   O cliente verá o título e a situação do documento.
                 </span>
               </span>
             </label>
-            <label className="flex cursor-pointer items-start gap-3 rounded-md border border-slate-200 bg-white p-3">
+            <label className="flex cursor-pointer items-start gap-3 rounded-md border border-[var(--ns-border)] bg-[var(--ns-surface)] p-3 transition hover:bg-[var(--ns-surface-alt)]">
               <input
                 type="checkbox"
                 checked={clientDownloadRequested}
@@ -357,11 +357,11 @@ export function ClientDocumentUpload({
                 className="mt-1 h-4 w-4 rounded border-slate-300 text-teal-700 focus:ring-teal-600"
               />
               <span>
-                <span className="flex items-center gap-2 text-sm font-semibold text-slate-950">
+                <span className="flex items-center gap-2 text-sm font-semibold text-[var(--ns-text)]">
                   <Download className="h-4 w-4 text-teal-700" />
                   Permitir download
                 </span>
-                <span className="mt-1 block text-xs leading-5 text-slate-500">
+                <span className="mt-1 block text-xs leading-5 text-[var(--ns-muted)]">
                   Inclui a visualização e libera o arquivo após aprovação.
                 </span>
               </span>

@@ -46,6 +46,7 @@ input:not(.ns-shell *) {
   --ns-surface-alt: #EEF1F8;
   --ns-surface-hover: #EEF1F8;
   --ns-text: #11182E;
+  --ns-text-strong: #11182E;
   --ns-text-secondary: #69738A;
   --ns-border: #DDE2EC;
   --ns-primary: #5267F5;
@@ -63,6 +64,7 @@ input:not(.ns-shell *) {
     --ns-surface-alt: #182238;
     --ns-surface-hover: #182238;
     --ns-text: #F3F6FF;
+    --ns-text-strong: #D7DDED;
     --ns-text-secondary: #97A3B8;
     --ns-border: #26314A;
     --ns-primary: #7385FF;
@@ -80,6 +82,7 @@ input:not(.ns-shell *) {
   --ns-surface-alt: #182238;
   --ns-surface-hover: #182238;
   --ns-text: #F3F6FF;
+  --ns-text-strong: #D7DDED;
   --ns-text-secondary: #97A3B8;
   --ns-border: #26314A;
   --ns-primary: #7385FF;
@@ -240,7 +243,8 @@ input:not(.ns-shell *) {
  * apenas para trocar cores repetidas.
  */
 .legacy-newsec {
-  color: #11182E;
+  background: var(--ns-bg);
+  color: var(--ns-text);
 }
 .legacy-newsec .bg-white { background-color: #FFFFFF; }
 .legacy-newsec .bg-slate-50 { background-color: #F8F9FC; }
@@ -298,3 +302,339 @@ input:not(.ns-shell *) {
   outline: 2px solid #5267F5;
   outline-offset: 2px;
 }
+
+/* As telas autenticadas historicas usam classes de transicao; no shell NewSec
+ * elas passam a respeitar os mesmos tokens do tema claro/escuro. */
+.ns-shell[data-theme="dark"].legacy-newsec .bg-white { background-color: var(--ns-surface); }
+.ns-shell[data-theme="dark"].legacy-newsec .bg-slate-50 { background-color: var(--ns-surface-alt); }
+.ns-shell[data-theme="dark"].legacy-newsec .bg-slate-100 { background-color: var(--ns-surface-alt); }
+.ns-shell[data-theme="dark"].legacy-newsec .border-slate-100,
+.ns-shell[data-theme="dark"].legacy-newsec .border-slate-200,
+.ns-shell[data-theme="dark"].legacy-newsec .border-slate-300 { border-color: var(--ns-border); }
+.ns-shell[data-theme="dark"].legacy-newsec .text-slate-950,
+.ns-shell[data-theme="dark"].legacy-newsec .text-slate-900,
+.ns-shell[data-theme="dark"].legacy-newsec .text-slate-800,
+.ns-shell[data-theme="dark"].legacy-newsec .text-slate-700 { color: var(--ns-text); }
+.ns-shell[data-theme="dark"].legacy-newsec .text-slate-600,
+.ns-shell[data-theme="dark"].legacy-newsec .text-slate-500,
+.ns-shell[data-theme="dark"].legacy-newsec .text-slate-400 { color: var(--ns-text-secondary); }
+.ns-shell[data-theme="dark"].legacy-newsec input,
+.ns-shell[data-theme="dark"].legacy-newsec select,
+.ns-shell[data-theme="dark"].legacy-newsec textarea { background-color: var(--ns-surface-alt); border-color: var(--ns-border); color: var(--ns-text); }
+.ns-shell[data-theme="dark"].legacy-newsec .bg-red-50,
+.ns-shell[data-theme="dark"].legacy-newsec .bg-rose-50 { background-color: color-mix(in srgb, var(--ns-danger) 12%, var(--ns-surface)); }
+.ns-shell[data-theme="dark"].legacy-newsec .bg-amber-50 { background-color: color-mix(in srgb, var(--ns-warning) 12%, var(--ns-surface)); }
+.ns-shell[data-theme="dark"].legacy-newsec .bg-emerald-50 { background-color: color-mix(in srgb, var(--ns-success) 12%, var(--ns-surface)); }
+.ns-shell[data-theme="dark"].legacy-newsec .bg-violet-50 { background-color: color-mix(in srgb, var(--ns-primary) 12%, var(--ns-surface)); }
+.ns-shell[data-theme="dark"].legacy-newsec table tbody tr:hover { background-color: color-mix(in srgb, var(--ns-primary) 8%, var(--ns-surface)); }
+
+/* Destaque sutil da prévia; não use branco puro no tema escuro. */
+.legacy-newsec .calculation-preview-row:hover,
+.legacy-newsec .calculation-preview-row.is-previewed {
+  background-color: color-mix(in srgb, var(--ns-primary) 8%, var(--ns-surface));
+}
+.ns-shell[data-theme="dark"].legacy-newsec .calculation-preview-row:hover,
+.ns-shell[data-theme="dark"].legacy-newsec .calculation-preview-row.is-previewed,
+.ns-shell[data-theme="dark"].legacy-newsec table tbody tr.calculation-preview-row:hover {
+  background-color: color-mix(in srgb, var(--ns-primary) 15%, var(--ns-surface));
+}
+
+/* Cabeçalho fixo da lista de simulações: destaque permanente, acima do hover. */
+.legacy-newsec .calculation-list-table thead {
+  background-color: color-mix(in srgb, var(--ns-primary) 5%, var(--ns-surface-alt));
+}
+.ns-shell[data-theme="dark"].legacy-newsec .calculation-list-table thead {
+  background-color: color-mix(in srgb, var(--ns-primary) 21%, var(--ns-surface));
+}
+.ns-shell[data-theme="dark"].legacy-newsec .calculation-list-table thead th {
+  color: var(--ns-text-strong);
+}
+/* Client list preview stays in the viewport while the table scrolls. */
+.clients-page .client-preview-row:hover,
+.clients-page .client-preview-row.is-preview {
+  background: color-mix(in srgb, var(--ns-primary) 12%, var(--ns-surface)) !important;
+}
+.clients-page {
+  color: var(--ns-text);
+  display: flex;
+  flex-direction: column;
+}
+.clients-page > section { order: -1; }
+.clients-page > div > a[href="/clientes/novo"] { white-space: nowrap; }
+.clients-page form { padding: 12px; }
+.clients-page .client-preview-row { border-color: var(--ns-border) !important; }
+.ns-shell[data-theme="dark"].legacy-newsec .clients-page table thead {
+  background-color: color-mix(in srgb, var(--ns-text) 7%, var(--ns-surface));
+  color: var(--ns-text-secondary);
+}
+.ns-shell[data-theme="dark"].legacy-newsec .clients-page table thead th {
+  background-color: transparent;
+  color: var(--ns-text-secondary);
+}
+.clients-page form input,
+.clients-page form select {
+  border-color: var(--ns-border);
+  background: var(--ns-surface-hover);
+  color: var(--ns-text);
+}
+.clients-page form button,
+.clients-page form summary {
+  cursor: pointer;
+}
+.client-edit-form { color: var(--ns-text); }
+.legacy-newsec .client-edit-form input,
+.legacy-newsec .client-edit-form select,
+.legacy-newsec .client-edit-form textarea {
+  background: var(--ns-surface-hover);
+  color: var(--ns-text);
+  border-color: var(--ns-border);
+  padding: 8px 12px;
+}
+.client-edit-form button, .client-edit-form select { cursor: pointer; }
+.client-edit-form input:focus, .client-edit-form select:focus, .client-edit-form textarea:focus {
+  outline: 2px solid var(--ns-primary);
+  outline-offset: 1px;
+}
+.pre-sale-edit-form { color: var(--ns-text); }
+.legacy-newsec .pre-sale-edit-form input:not([type="checkbox"]),
+.legacy-newsec .pre-sale-edit-form select,
+.legacy-newsec .pre-sale-edit-form textarea {
+  background: var(--ns-surface-hover);
+  color: var(--ns-text);
+  border-color: var(--ns-border);
+}
+.pre-sale-edit-form button, .pre-sale-edit-form select { cursor: pointer; }
+.pre-sale-edit-form progress {
+  appearance: none;
+  border: 0;
+  border-radius: 4px;
+  overflow: hidden;
+  background: var(--ns-surface-hover);
+}
+.pre-sale-edit-form progress::-webkit-progress-bar {
+  background: var(--ns-surface-hover);
+}
+.pre-sale-edit-form progress::-webkit-progress-value {
+  background: var(--ns-success);
+  border-radius: 4px;
+}
+.pre-sale-edit-form progress::-moz-progress-bar {
+  background: var(--ns-success);
+}
+.calculation-edit-form { color: var(--ns-text); }
+.legacy-newsec .calculation-edit-form input:not([type="hidden"]),
+.legacy-newsec .calculation-edit-form select,
+.legacy-newsec .calculation-edit-form textarea {
+  background: var(--ns-surface-hover);
+  color: var(--ns-text);
+  border-color: var(--ns-border);
+}
+.calculation-edit-form button, .calculation-edit-form select { cursor: pointer; }
+.calculation-rate-details .lg\:grid-cols-\[minmax\(0\,1fr\)_16rem\] { grid-template-columns: minmax(0, 1fr); }
+.legacy-newsec .calculation-rate-details table thead { background: var(--ns-surface-hover); color: var(--ns-text-secondary); }
+.legacy-newsec .calculation-edit-form #financed_value,
+.legacy-newsec .calculation-edit-form #remaining_installments {
+  background: var(--ns-surface-hover);
+  border-color: var(--ns-border);
+  color: var(--ns-text);
+}
+.ns-shell[data-theme="dark"] .interest-rate-preview .text-teal-800,
+.ns-shell[data-theme="dark"] .interest-rate-preview .text-teal-700 {
+  color: var(--ns-success);
+}
+.ns-shell[data-theme="dark"] .interest-rate-preview .text-red-700,
+.ns-shell[data-theme="dark"] .interest-rate-preview .text-red-800 {
+  color: var(--ns-danger);
+}
+.ns-shell[data-theme="dark"] .interest-rate-preview .text-emerald-800 {
+  color: var(--ns-success);
+}
+.ns-shell[data-theme="dark"] .interest-rate-preview tbody tr,
+.ns-shell[data-theme="dark"] .interest-rate-preview .border-red-200,
+.ns-shell[data-theme="dark"] .interest-rate-preview .border-emerald-200 {
+  border-color: var(--ns-border);
+}
+.pre-sales-board .pre-sale-card p { color: var(--ns-text-secondary); }
+.legacy-newsec .pre-sales-board .pre-sale-card a,
+.legacy-newsec .pre-sales-board .pre-sale-card button {
+  border-color: var(--ns-border);
+}
+.legacy-newsec .pre-sales-board .pre-sale-card a:hover,
+.legacy-newsec .pre-sales-board .pre-sale-card button:hover {
+  background-color: var(--ns-surface);
+}
+.legacy-newsec .pre-sales-page form button {
+  color: var(--ns-text);
+  cursor: pointer;
+}
+.legacy-newsec .pre-sales-page form,
+.legacy-newsec .pre-sales-page form button,
+.legacy-newsec .pre-sales-page form select,
+.legacy-newsec .pre-sales-page form input {
+  border-color: var(--ns-border);
+}
+.legacy-newsec .pre-sales-page div:has(> form) {
+  border-color: var(--ns-border);
+  background: var(--ns-surface);
+}
+.management-page, .management-scope { color: var(--ns-text); }
+.management-scope .tracking-wide { letter-spacing: 0; }
+.ns-shell[data-theme="dark"] .management-scope :is(.text-teal-900,.text-teal-950,.text-sky-900,.text-indigo-900) { color: var(--ns-text); }
+.ns-shell[data-theme="dark"] .management-scope :is(.border-teal-100,.border-teal-200,.border-sky-100) { border-color: var(--ns-border); }
+.management-page .overflow-x-auto { max-height: 480px; overflow-y: auto; }
+.management-page table thead { position: sticky; top: 0; z-index: 1; }
+.legacy-newsec .management-scope table thead {
+  background: var(--ns-surface-hover);
+  color: var(--ns-text-secondary);
+}
+.legacy-newsec .management-scope table th { color: var(--ns-text-secondary); }
+.legacy-newsec .management-scope table tbody tr:hover,
+.legacy-newsec .management-scope .management-selected {
+  background: color-mix(in srgb, var(--ns-primary) 14%, var(--ns-surface)) !important;
+}
+.legacy-newsec .management-scope table tbody tr { border-color: var(--ns-border); }
+.legacy-newsec .management-scope input:not([type="checkbox"]):not([type="radio"]),
+.legacy-newsec .management-scope select,
+.legacy-newsec .management-scope textarea {
+  background: var(--ns-surface-hover);
+  color: var(--ns-text);
+  border-color: var(--ns-border);
+}
+.management-scope button, .management-scope select, .management-scope summary { cursor: pointer; }
+.management-scope button:disabled { cursor: not-allowed; }
+.management-scope input[type="file"]::file-selector-button {
+  border: 1px solid var(--ns-border);
+  border-radius: 6px;
+  background: var(--ns-surface-hover);
+  color: var(--ns-primary);
+  padding: 8px 12px;
+  margin-right: 10px;
+  cursor: pointer;
+}
+.management-scope input[type="file"]::file-selector-button:hover { background: var(--ns-surface); }
+.management-scope :is(a,button,input,select,textarea,summary,tr[tabindex]):focus-visible {
+  outline: 2px solid var(--ns-primary);
+  outline-offset: 2px;
+}
+.management-badge { display: inline-block; border-radius: 999px; padding: 5px 10px; font-size: 11px; }
+.management-badge.success { background: color-mix(in srgb, var(--ns-success) 15%, var(--ns-surface)); color: var(--ns-success); }
+.management-badge.danger { background: color-mix(in srgb, var(--ns-danger) 15%, var(--ns-surface)); color: var(--ns-danger); }
+.approval-compact section > div.grid { grid-template-columns: minmax(0,1fr); }
+.approval-compact section > div:first-child { display: none; }
+.approval-compact article { box-shadow: none; }
+.approval-compact article .lg\:grid-cols-4 { grid-template-columns: repeat(2,minmax(0,1fr)); }
+.ns-shell[data-theme="dark"] .management-scope :is(.bg-teal-50,.bg-sky-50,.bg-teal-100,.bg-sky-100) {
+  background: color-mix(in srgb, var(--ns-primary) 12%, var(--ns-surface));
+}
+.ns-shell[data-theme="dark"] .management-scope :is(.text-teal-800,.text-teal-700,.text-sky-700) { color: var(--ns-primary); }
+.ns-shell[data-theme="dark"] .management-scope :is(.text-rose-700,.text-rose-800,.text-red-700,.text-red-800) { color: var(--ns-danger); }
+.ns-shell[data-theme="dark"] .management-scope :is(.text-emerald-700,.text-emerald-800) { color: var(--ns-success); }
+.ns-shell[data-theme="dark"] .management-scope .divide-y > :not(:last-child) { border-color: var(--ns-border); }
+
+/* Financeiro: superfices e realces seguem o mesmo tema nas tres visoes. */
+.finance-workspace { color: var(--ns-text); }
+.legacy-newsec .finance-workspace .bg-white { background: var(--ns-surface); }
+.legacy-newsec .finance-workspace :is(.text-slate-950,.text-slate-900,.text-slate-800,.text-slate-700) { color: var(--ns-text); }
+.legacy-newsec .finance-workspace :is(.text-slate-600,.text-slate-500,.text-slate-400) { color: var(--ns-text-secondary); }
+.legacy-newsec .finance-workspace :is(.border-slate-100,.border-slate-200,.border-slate-300) { border-color: var(--ns-border); }
+.legacy-newsec .finance-workspace .divide-y > :not(:last-child) { border-color: var(--ns-border); }
+.legacy-newsec .finance-workspace .rounded-lg { border-radius: 8px; }
+.finance-field { display: grid; gap: 6px; font-size: 11px; color: var(--ns-text-secondary); }
+.legacy-newsec .finance-workspace :is(input,select,textarea) {
+  background: var(--ns-surface-hover);
+  color: var(--ns-text);
+  border-color: var(--ns-border);
+}
+.finance-workspace :is(button,select,summary,input[type="checkbox"]) { cursor: pointer; }
+.finance-workspace :is(button,select,input):disabled { cursor: default; }
+.legacy-newsec .finance-workspace table thead {
+  background: color-mix(in srgb, var(--ns-text-secondary) 8%, var(--ns-surface));
+  color: var(--ns-text-secondary);
+}
+.ns-shell[data-theme="dark"].legacy-newsec .finance-workspace table thead {
+  background: color-mix(in srgb, var(--ns-primary) 15%, var(--ns-surface));
+  color: var(--ns-text-secondary);
+}
+.legacy-newsec .finance-workspace table tbody tr:hover {
+  background: color-mix(in srgb, var(--ns-primary) 8%, var(--ns-surface));
+}
+.legacy-newsec .finance-workspace table tbody tr.finance-selected {
+  background: color-mix(in srgb, var(--ns-primary) 13%, var(--ns-surface));
+}
+.legacy-newsec .finance-workspace table tbody tr { border-color: var(--ns-border); }
+.finance-workspace :is(a,button,input,select,textarea,tr[tabindex]):focus-visible {
+  outline: 2px solid var(--ns-primary);
+  outline-offset: 2px;
+}
+.ns-shell[data-theme="dark"] .finance-workspace :is(.text-teal-700,.text-teal-800) { color: var(--ns-primary); }
+.ns-shell[data-theme="dark"] .finance-workspace :is(.text-red-700,.text-red-800) { color: var(--ns-danger); }
+.ns-shell[data-theme="dark"] .finance-workspace :is(.text-emerald-700,.text-emerald-800) { color: var(--ns-success); }
+.ns-shell[data-theme="dark"] .finance-workspace :is(.bg-teal-50,.bg-teal-100) { background: color-mix(in srgb, var(--ns-primary) 12%, var(--ns-surface)); }
+.finance-workspace input[type="file"]::file-selector-button {
+  background: var(--ns-surface-hover); color: var(--ns-primary); border: 1px solid var(--ns-border);
+  border-radius: 6px; padding: 8px 12px; margin-right: 10px; cursor: pointer;
+}
+
+/* Reference workspaces: shared list, detail and form surfaces. */
+.reference-page { color: var(--ns-text); min-width: 0; }
+.ns-panel { min-width: 0; border: 1px solid var(--ns-border); border-radius: 8px; background: var(--ns-surface); }
+.reference-page :is(input:not([type="checkbox"]):not([type="radio"]),select,textarea) {
+  min-width: 0; border: 1px solid var(--ns-border); border-radius: 6px;
+  padding: 8px 10px; background: var(--ns-surface-hover); color: var(--ns-text); font-size: 12px;
+}
+.reference-page :is(button,summary,select,input[type="checkbox"],input[type="radio"]) { cursor: pointer; }
+.reference-page :disabled { cursor: default; opacity: .55; }
+.reference-page :is(a,button,summary,input,select,textarea,tr[tabindex]):focus-visible { outline: 2px solid var(--ns-primary); outline-offset: 2px; }
+.reference-page :is(.bg-white,.bg-slate-100) { background: var(--ns-surface); }
+.reference-page :is(.bg-slate-50,.bg-slate-200) { background: var(--ns-surface-hover); }
+.reference-page :is(.text-slate-950,.text-slate-900,.text-slate-800,.text-slate-700) { color: var(--ns-text); }
+.reference-page :is(.text-slate-600,.text-slate-500,.text-slate-400) { color: var(--ns-text-secondary); }
+.reference-page :is(.border-slate-100,.border-slate-200,.border-slate-300) { border-color: var(--ns-border); }
+.reference-page :is(.bg-teal-50,.bg-teal-100,.bg-sky-50) { background: color-mix(in srgb,var(--ns-primary) 10%,var(--ns-surface)); }
+.reference-page :is(.text-teal-700,.text-teal-800,.text-teal-900,.text-teal-950) { color: var(--ns-primary); }
+.reference-page :is(.bg-red-50,.bg-red-100,.bg-rose-50) { background: color-mix(in srgb,var(--ns-danger) 10%,var(--ns-surface)); }
+.reference-page :is(.text-red-600,.text-red-700,.text-red-800,.text-red-900,.text-red-950) { color: var(--ns-danger); }
+.reference-page :is(.bg-amber-50,.bg-amber-100) { background: color-mix(in srgb,var(--ns-warning) 12%,var(--ns-surface)); }
+.reference-page :is(.text-amber-700,.text-amber-800,.text-amber-900) { color: var(--ns-warning); }
+.reference-page :is(.bg-teal-700,.hover\:bg-teal-800:hover) { background: var(--ns-primary); color: var(--ns-primary-foreground); }
+.reference-page :is(.hover\:bg-slate-50:hover,.hover\:bg-slate-100:hover,.hover\:bg-teal-50:hover) { background: var(--ns-surface-hover); }
+.reference-page table { border-collapse: collapse; }
+.reference-page table thead { background: color-mix(in srgb,var(--ns-primary) 9%,var(--ns-surface)); color: var(--ns-text-secondary); }
+.reference-page table tbody tr:hover { background: color-mix(in srgb,var(--ns-primary) 8%,var(--ns-surface)); }
+.reference-page table tr[aria-selected="true"] { background: color-mix(in srgb,var(--ns-primary) 14%,var(--ns-surface)); }
+.reference-page input[type="file"]::file-selector-button { background: var(--ns-surface-hover); color: var(--ns-primary); border: 1px solid var(--ns-border); border-radius: 6px; padding: 8px 12px; cursor: pointer; }
+.reference-page .reference-collection > aside > div > button { padding: 4px; }
+
+/* Refinement stays scoped to the reference screens and auxiliary routes. */
+.reference-list-panel table :is(th,td) { padding-block: 10px; }
+.reference-list-panel table th { font-size: 11px; white-space: nowrap; }
+.reference-list-panel table td { line-height: 1.5; }
+.reference-list-panel table td:first-child { min-width: 150px; }
+.reference-collection > aside { overflow-wrap: anywhere; }
+.reference-page > details > summary { padding: 4px; }
+.reference-page .reference-facts { margin-top: 8px; }
+.auxiliary-scope { color: var(--ns-text); }
+.auxiliary-scope :is(button,summary,select,input[type="checkbox"],input[type="radio"]) { cursor: pointer; }
+.auxiliary-scope :disabled { cursor: not-allowed; }
+.auxiliary-scope :is(a,button,input,select,textarea,summary):focus-visible { outline: 2px solid var(--ns-primary); outline-offset: 2px; }
+.legacy-newsec .auxiliary-scope :is(input:not([type="checkbox"]):not([type="radio"]),select,textarea) { background: var(--ns-surface-hover); color: var(--ns-text); border-color: var(--ns-border); }
+.legacy-newsec .auxiliary-scope :is(.bg-teal-700,.hover\:bg-teal-800:hover) { background: var(--ns-primary); color: var(--ns-primary-foreground); }
+.auxiliary-scope input[type="file"]::file-selector-button { background: var(--ns-surface-hover); color: var(--ns-primary); border: 1px solid var(--ns-border); border-radius: 6px; padding: 8px 12px; margin-right: 10px; cursor: pointer; }
+.ns-shell[data-theme="dark"] .auxiliary-scope :is(.text-amber-800,.text-amber-900) { color: var(--ns-warning); }
+.ns-shell[data-theme="dark"] .auxiliary-scope :is(.text-emerald-700,.text-emerald-800) { color: var(--ns-success); }
+.ns-shell[data-theme="dark"] .auxiliary-scope :is(.text-red-700,.text-red-800,.text-rose-700,.text-rose-800) { color: var(--ns-danger); }
+.ns-shell[data-theme="dark"] .auxiliary-scope :is(.text-teal-700,.text-teal-800,.text-teal-900) { color: var(--ns-primary); }
+.legacy-newsec .auxiliary-scope table thead { background: var(--ns-surface-hover); color: var(--ns-text-secondary); }
+@media (min-width: 1024px) {
+  .ns-shell main > .reference-page { padding-inline: 32px; padding-block: 20px; }
+}
+
+/* A document preview is paper, independent of the surrounding UI theme. */
+.reference-document-preview { background: #fff; color: #172033; }
+.reference-document-preview > div { padding: 20px; font-size: 11px; line-height: 1.6; }
+.reference-document-preview :is(h1,h2,h3,p,li,td,th) { color: #172033; }
+.reference-document-preview :is(h1,h2,h3) { margin-block: 8px; font-size: 14px; font-weight: 700; }
+.reference-document-preview table { width: 100%; }
+.reference-document-preview img { max-width: 100%; height: auto; }
+.reference-detail-sections { display: grid; gap: 16px; align-items: start; }
+@media (min-width: 1280px) { .reference-detail-sections { grid-template-columns: repeat(2,minmax(0,1fr)); } }

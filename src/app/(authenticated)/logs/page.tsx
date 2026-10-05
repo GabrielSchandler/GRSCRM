@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { PageHeader } from "@/components/layout/page-header";
+import { ManagementAudit } from "@/components/management/management-audit";
 import { getCurrentUserContext } from "@/lib/auth/current-user";
 import { canAccessAuditLogs } from "@/lib/audit/log";
 import { displayValue, formatDateTime } from "@/lib/clients/formatters";
@@ -80,11 +81,13 @@ export default async function LogsPage({ searchParams }: LogsPageProps) {
   return (
     <>
       <PageHeader
-        title="Logs"
+        title="Gestão"
         description="Acompanhe quem criou, alterou, gerou ou excluiu registros dentro da empresa."
       />
       <div className="space-y-6 p-6">
-        <form className="grid gap-3 rounded-lg border border-slate-200 bg-white p-4 shadow-sm md:grid-cols-[1fr_180px_220px_160px_160px_auto]">
+        <details open={Boolean(params.action || params.entity || params.user || params.from || params.to)}>
+        <summary className="mb-3 text-sm font-semibold text-[var(--ns-primary)]">Filtros da auditoria</summary>
+        <form className="grid gap-3 rounded-lg border border-slate-200 bg-white p-4 shadow-sm sm:grid-cols-2 2xl:grid-cols-[minmax(0,1fr)_160px_180px_150px_150px_auto]">
           <input
             name="action"
             defaultValue={params.action ?? ""}
@@ -134,6 +137,7 @@ export default async function LogsPage({ searchParams }: LogsPageProps) {
             Filtrar
           </button>
         </form>
+        </details>
 
         {error ? (
           <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
@@ -142,6 +146,9 @@ export default async function LogsPage({ searchParams }: LogsPageProps) {
               : error.message}
           </div>
         ) : (
+          <>
+          <ManagementAudit logs={logs} users={users} />
+          <details className="management-page rounded-lg border border-[var(--ns-border)] p-4"><summary className="cursor-pointer text-sm font-semibold">Listagem completa</summary>
           <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
             <div className="overflow-x-auto">
               <table className="w-full min-w-[1100px] border-collapse text-left text-sm">
@@ -193,6 +200,8 @@ export default async function LogsPage({ searchParams }: LogsPageProps) {
               </table>
             </div>
           </div>
+          </details>
+          </>
         )}
       </div>
     </>

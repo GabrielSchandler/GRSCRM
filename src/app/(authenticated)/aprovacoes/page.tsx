@@ -1,11 +1,12 @@
 import { Clock3, FileText, MessageSquareText, ShieldCheck } from "lucide-react";
 import { redirect } from "next/navigation";
 import {
-  ClientApprovalQueue,
   type DocumentApprovalQueueItem,
   type TrackingApprovalQueueItem,
 } from "@/components/approvals/client-approval-queue";
 import { PageHeader } from "@/components/layout/page-header";
+import { ManagementApprovals } from "@/components/management/management-approvals";
+import { ManagementMetric } from "@/components/management/management-ui";
 import { getCurrentUserContext } from "@/lib/auth/current-user";
 import { formatDateTime } from "@/lib/clients/formatters";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -144,30 +145,18 @@ export default async function ClientApprovalsPage() {
   return (
     <>
       <PageHeader
-        title="Aprovações do cliente"
+        title="Gestão"
         description="Revise tudo o que poderá ser exibido ou baixado no portal de acompanhamento."
       />
       <div className="p-4 sm:p-6">
         <div className="mx-auto max-w-7xl space-y-6">
           <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-              <div className="flex items-center justify-between"><span className="text-sm font-medium text-slate-600">Total pendente</span><ShieldCheck className="h-5 w-5 text-teal-700" /></div>
-              <p className="mt-3 text-3xl font-semibold text-slate-950">{trackingItems.length + documentItems.length}</p>
-            </div>
-            <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-              <div className="flex items-center justify-between"><span className="text-sm font-medium text-slate-600">Acompanhamentos</span><MessageSquareText className="h-5 w-5 text-teal-700" /></div>
-              <p className="mt-3 text-3xl font-semibold text-slate-950">{trackingItems.length}</p>
-            </div>
-            <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-              <div className="flex items-center justify-between"><span className="text-sm font-medium text-slate-600">Documentos</span><FileText className="h-5 w-5 text-sky-700" /></div>
-              <p className="mt-3 text-3xl font-semibold text-slate-950">{documentItems.length}</p>
-            </div>
-            <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-              <div className="flex items-center justify-between"><span className="text-sm font-medium text-slate-600">Mais antiga</span><Clock3 className="h-5 w-5 text-amber-700" /></div>
-              <p className="mt-3 text-sm font-semibold text-slate-950">{oldestRequest ? formatDateTime(oldestRequest) : "Fila vazia"}</p>
-            </div>
+            <ManagementMetric label="Aprovações pendentes" value={trackingItems.length + documentItems.length} icon={ShieldCheck} tone="danger" />
+            <ManagementMetric label="Acompanhamentos" value={trackingItems.length} icon={MessageSquareText} />
+            <ManagementMetric label="Documentos" value={documentItems.length} icon={FileText} tone="success" />
+            <ManagementMetric label="Solicitação mais antiga" value={oldestRequest ? new Date(oldestRequest).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" }) : "Fila vazia"} detail={oldestRequest ? formatDateTime(oldestRequest) : undefined} icon={Clock3} tone="warning" />
           </section>
-          <ClientApprovalQueue trackingItems={trackingItems} documentItems={documentItems} />
+          <ManagementApprovals trackingItems={trackingItems} documentItems={documentItems} />
         </div>
       </div>
     </>

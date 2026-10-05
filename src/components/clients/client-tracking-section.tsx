@@ -243,32 +243,32 @@ export function ClientTrackingSection({
   }
 
   return (
-    <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-      <div className="border-b border-slate-200 bg-gradient-to-r from-white via-teal-50/60 to-emerald-50/60 px-6 py-5">
+    <section className="overflow-hidden rounded-[10px] border border-[var(--ns-border)] bg-[var(--ns-surface)] shadow-none">
+      <div className="border-b border-[var(--ns-border)] bg-[color-mix(in_srgb,var(--ns-primary)_7%,var(--ns-surface))] px-6 py-5">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-teal-700">
+            <p className="text-xs font-semibold uppercase tracking-wide text-[var(--ns-primary)]">
               Portal do cliente
             </p>
-            <h2 className="mt-1 text-lg font-semibold text-slate-950">
+            <h2 className="mt-1 text-lg font-semibold text-[var(--ns-text)]">
               Acompanhamento do cliente
             </h2>
-            <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
+            <p className="mt-2 max-w-3xl text-sm leading-6 text-[var(--ns-muted)]">
               Registre movimentações claras para reduzir cobranças repetidas do
               cliente. Informações destinadas ao portal só aparecem depois da
               aprovação da Gestão.
             </p>
           </div>
-          <div className="rounded-lg border border-teal-200 bg-white px-4 py-3 text-sm text-slate-700 shadow-sm">
-            <span className="font-semibold text-teal-800">{updates.length}</span>{" "}
+          <div className="rounded-[8px] border border-[var(--ns-border)] bg-[var(--ns-surface)] px-4 py-3 text-sm text-[var(--ns-text)] shadow-none">
+            <span className="font-semibold text-[var(--ns-primary)]">{updates.length}</span>{" "}
             movimentação{updates.length === 1 ? "" : "ões"} registrada
           </div>
         </div>
       </div>
 
       <div className="grid gap-6 p-6 lg:grid-cols-[minmax(280px,420px)_1fr]">
-        <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
-          <h3 className="text-sm font-semibold text-slate-950">
+        <div className="rounded-[8px] border border-[var(--ns-border)] bg-[var(--ns-surface-alt)] p-4">
+          <h3 className="text-sm font-semibold text-[var(--ns-text)]">
             Nova atualização
           </h3>
           <div className="mt-4 space-y-4">

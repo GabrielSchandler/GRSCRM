@@ -103,7 +103,7 @@ export default async function EditarPreVendaPage({ params }: EditarPreVendaPageP
       />
       <div className="space-y-4 p-6">
         {canDelete ? <PreSaleDeleteButton preSaleId={preSale.id} /> : null}
-        <div className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+        <div>
           <PreSalesForm
             clients={(clientsData ?? []) as ClientOption[]}
             consultants={consultants}

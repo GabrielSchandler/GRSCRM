@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import { WhatsAppLink } from "@/components/clients/whatsapp-link";
 import { PreSaleDeleteButton } from "@/components/pre-sales/pre-sale-delete-button";
 import { PreSaleSearchMatchBadges } from "@/components/pre-sales/pre-sale-search-match-badges";
@@ -38,6 +38,7 @@ type PreSalesKanbanProps = {
 
 export function PreSalesKanban({ preSales, canDelete = false }: PreSalesKanbanProps) {
   const router = useRouter();
+  const suppressCardClick = useRef(false);
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [dropTarget, setDropTarget] = useState<PreSaleStatus | null>(null);
   const [pendingStatusChange, setPendingStatusChange] = useState<{
@@ -95,9 +96,8 @@ export function PreSalesKanban({ preSales, canDelete = false }: PreSalesKanbanPr
   }
 
   return (
-    <section className="space-y-4">
+    <section className="pre-sales-board min-w-0 space-y-4">
       <div className="flex items-center justify-between">
-        <p className="text-sm font-medium text-[#69738A]">Arraste os cards entre as etapas para atualizar o fluxo.</p>
         {isPending ? <p className="text-sm text-[#69738A]">Atualizando...</p> : null}
       </div>
       {message ? (
@@ -111,7 +111,7 @@ export function PreSalesKanban({ preSales, canDelete = false }: PreSalesKanbanPr
           {message}
         </div>
       ) : null}
-      <div className="grid min-w-[1080px] gap-3 overflow-x-auto xl:grid-cols-6">
+      <div className="flex gap-3 overflow-x-auto pb-3">
         {(preSales.some((preSale) =>
           preSale.status === "inativo" || preSale.status === "distrato",
         )
@@ -136,41 +136,57 @@ export function PreSalesKanban({ preSales, canDelete = false }: PreSalesKanbanPr
                   setDropTarget(null);
                 }
               }}
-              onDrop={() => handleDrop(status.value)}
-              className={`flex min-h-[620px] flex-col rounded-[12px] border p-3 transition ${
+              onDrop={(event) => { event.preventDefault(); handleDrop(status.value); }}
+              className={`pre-sale-column flex min-h-[620px] min-w-[240px] flex-1 flex-col rounded-lg border p-3 transition ${
                 dropTarget === status.value
-                  ? "border-[#9EAAFF] bg-[#EEF0FF] ring-2 ring-[#C9D0FF]"
-                  : "border-[#DDE2EC] bg-white"
+                  ? "border-[var(--ns-primary)] bg-[var(--ns-surface-hover)] ring-2 ring-[var(--ns-primary)]"
+                  : "border-[var(--ns-border)] bg-[var(--ns-surface)]"
               }`}
             >
               <div className="mb-3 flex items-center justify-between px-1">
-                <div className="flex items-center gap-2 text-sm font-semibold text-[#11182E]">
+                <div className="flex items-center gap-2 text-sm font-semibold text-[var(--ns-text)]">
                   <span className={`h-3 w-3 rounded-full ${stageTone[status.value].dot}`} />
                   {status.label}
                 </div>
-                <span className="rounded-full bg-[#EEF0FF] px-3 py-1 text-xs font-semibold text-[#5267F5]">
+                <span className="rounded-full bg-[var(--ns-surface-hover)] px-3 py-1 text-xs font-semibold text-[var(--ns-primary)]">
                   {columnPreSales.length}
                 </span>
               </div>
-              <div className="space-y-3">
+              <div className="max-h-[calc(100dvh-20rem)] min-h-80 space-y-3 overflow-y-auto">
                 {columnPreSales.map((preSale) => (
                   <article
                     key={preSale.id}
-                    draggable
-                    onDragStart={() => setDraggedId(preSale.id)}
+                    draggable={!isPending}
+                    tabIndex={0}
+                    aria-label={`Abrir pré-venda de ${preSale.client?.full_name ?? "cliente"}`}
+                    onClick={(event) => {
+                      if (suppressCardClick.current || (event.target as HTMLElement).closest("a,button,select,input")) return;
+                      router.push(`/pre-vendas/${preSale.id}`);
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.target === event.currentTarget && event.key === "Enter") router.push(`/pre-vendas/${preSale.id}`);
+                    }}
+                    onDragStart={(event) => {
+                      suppressCardClick.current = true;
+                      event.dataTransfer.setData("text/plain", preSale.id);
+                      event.dataTransfer.effectAllowed = "move";
+                      setDraggedId(preSale.id);
+                    }}
+                    onPointerDown={() => { suppressCardClick.current = false; }}
                     onDragEnd={() => {
                       setDraggedId(null);
                       setDropTarget(null);
                     }}
-                    className={`rounded-[10px] border bg-[#F4F6FB] p-4 shadow-none transition ${
+                    className={`pre-sale-card rounded-lg border bg-[var(--ns-surface-hover)] p-4 shadow-none transition focus-visible:outline-2 focus-visible:outline-[var(--ns-primary)] ${
                       draggedId === preSale.id
-                        ? "cursor-grabbing border-[#9EAAFF] bg-white opacity-70"
-                        : "cursor-grab border-[#DDE2EC]"
+                        ? "cursor-grabbing border-[var(--ns-primary)] opacity-60"
+                        : "cursor-pointer border-[var(--ns-border)] hover:border-[var(--ns-primary)]"
                     }`}
                   >
                     <Link
                       href={`/pre-vendas/${preSale.id}`}
-                      className="text-sm font-semibold text-[#11182E] hover:text-[#4053DE]"
+                      draggable={false}
+                      className="text-sm font-semibold text-[var(--ns-text)] hover:text-[var(--ns-primary)]"
                     >
                       {preSale.client?.full_name ?? "Cliente não encontrado"}
                     </Link>
@@ -178,13 +194,13 @@ export function PreSalesKanban({ preSales, canDelete = false }: PreSalesKanbanPr
                     <p className="mt-1 text-xs font-medium text-[#69738A]">
                       {formatPreSaleType(preSale.pre_sale_type)} · {preSale.service_type || "Sem origem"}
                     </p>
-                    <span className={`mt-3 inline-flex rounded-full px-3 py-1 text-xs font-semibold ${stageTone[status.value].chip}`}>
+                    <span className="mt-3 inline-flex rounded-full border border-[var(--ns-border)] bg-[var(--ns-surface)] px-3 py-1 text-xs font-semibold text-[var(--ns-primary)]">
                       {formatCurrency(preSale.contract_value)}
                     </span>
                     <p className="mt-3 text-xs text-[#69738A]">
                       Consultor: {formatUserName(preSale.consultant)}
                     </p>
-                    <div className="mt-3 flex flex-wrap gap-2 border-t border-[#DDE2EC] pt-3">
+                    <div className="mt-3 flex flex-wrap gap-2 border-t border-[var(--ns-border)] pt-3" onDragStart={(event) => event.preventDefault()}>
                       <WhatsAppLink
                         phone={preSale.client?.phone_mobile ?? null}
                         label="WhatsApp"
@@ -192,7 +208,7 @@ export function PreSalesKanban({ preSales, canDelete = false }: PreSalesKanbanPr
                       />
                       <Link
                         href={`/pre-vendas/${preSale.id}/editar`}
-                        className="rounded-lg border border-[#DDE2EC] bg-white px-2.5 py-1.5 text-xs font-semibold text-[#11182E] transition hover:bg-[#EEF1F8]"
+                        className="rounded-lg border border-[var(--ns-border)] bg-[var(--ns-surface)] px-2.5 py-1.5 text-xs font-semibold text-[var(--ns-text)] transition hover:bg-[var(--ns-surface-hover)]"
                       >
                         Editar
                       </Link>

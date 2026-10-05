@@ -1,3 +1,6 @@
+import { RecordTabs } from "@/components/newsec/record-tabs";
+import { ReferenceFacts } from "@/components/newsec/reference-ui";
+import type { ClientTimelineEvent } from "@/types/client-timeline";
 import { Edit } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -257,15 +260,18 @@ export default async function PreVendaPage({ params, searchParams }: PreVendaPag
         ? "Pré-venda atualizada com sucesso."
         : null;
 
-  return (
-    <>
-      <PageHeader
-        title={snapshot?.full_name ?? client?.full_name ?? "Pré-venda"}
-        description="Cadastro operacional completo da oportunidade."
-      />
-      <div className="space-y-6 p-6">
-        {successMessage ? <ClientToast message={successMessage} /> : null}
-        <div className="flex flex-wrap gap-3">
+
+  const { data: activityRows, error: activityError } = await supabase
+    .from("client_timeline_events").select("*")
+    .eq("company_id", companyId).eq("pre_sale_id", preSale.id)
+    .order("created_at", { ascending: false }).limit(8);
+  const activities = (activityRows ?? []) as ClientTimelineEvent[];
+
+  return <>
+    <PageHeader title="Detalhe da pré-venda" description="Informações, dados financeiros e documentos desta oportunidade comercial." />
+    <div className="reference-page space-y-4 p-4 sm:p-6">
+      {successMessage ? <ClientToast message={successMessage} /> : null}
+      <section className="ns-panel p-4"><div className="flex flex-wrap items-start justify-between gap-4"><div><p className="mb-2 text-xs text-[var(--ns-text-secondary)]">{displayValue(preSale.tracking_protocol)}</p><h2 className="text-xl font-semibold">{snapshot?.full_name ?? client?.full_name ?? "Pré-venda"}</h2><p className="mt-1 text-xs text-[var(--ns-text-secondary)]">{displayValue(preSale.service_type)}</p></div><PreSalesStatusBadge status={preSale.status} /></div><div className="mt-4 border-t border-[var(--ns-border)] pt-4">        <div className="flex flex-wrap gap-3">
           {canEdit ? (
             <Link
               href={`/pre-vendas/${preSale.id}/editar`}
@@ -300,7 +306,19 @@ export default async function PreVendaPage({ params, searchParams }: PreVendaPag
           <WhatsAppLink phone={snapshot?.phone_mobile ?? client?.phone_mobile ?? null} />
         </div>
 
-        <DetailSection title="Cabecalho">
+</div><div className="mt-4 grid gap-3 border-t border-[var(--ns-border)] pt-4 sm:grid-cols-2 xl:grid-cols-4">{[
+  ["Cliente", snapshot?.full_name ?? client?.full_name ?? "Não informado"],
+  ["Origem", displayValue(preSale.media)],
+  ["Consultor responsável", formatUserName(consultant)],
+  ["Valor do contrato", formatCurrency(preSale.contract_value)]
+].map(([label,value]) => <div key={label} className="min-w-0"><p className="text-[10px] text-[var(--ns-text-secondary)]">{label}</p><p className="mt-1 break-words text-xs font-semibold">{value}</p></div>)}</div></section>
+      <RecordTabs defaultIndex={queryParams.legalPaymentSuccess || queryParams.legalPaymentError ? 1 : 0} panels={[
+        {label:"Resumo",content:<div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_300px]">
+          <div className="space-y-4"><section className="ns-panel p-4"><h2 className="text-sm font-semibold">Dados do cliente</h2><ReferenceFacts items={[["Nome",snapshot?.full_name ?? client?.full_name ?? "Não informado"],["CPF",displayCpf(snapshot?.cpf ?? client?.cpf ?? null)],["E-mail",displayValue(snapshot?.email ?? client?.email ?? null)],["Telefone",displayPhone(snapshot?.phone_mobile ?? client?.phone_mobile ?? null)]]} />{client && <Link href={`/clientes/${client.id}`} className="text-xs font-semibold text-[var(--ns-primary)]">Ver cliente 360°</Link>}</section><section className="ns-panel p-4"><h2 className="text-sm font-semibold">Origem da oportunidade</h2><ReferenceFacts items={[["Mídia",displayValue(preSale.media)],["Tipo",formatPreSaleType(preSale.pre_sale_type)],["Consultor",formatUserName(consultant)]]} /></section></div>
+          <div className="space-y-4"><section className="ns-panel p-4"><h2 className="text-sm font-semibold">Informações comerciais</h2><ReferenceFacts items={[["Valor do contrato",formatCurrency(preSale.contract_value)],["Serviço",displayValue(preSale.service_type)],["Financeira",displayValue(financialCase?.financer_name ?? null)],["Valor financiado",formatCurrency(financialCase?.financed_amount ?? null)],["Parcela",formatCurrency(financialCase?.installment_amount ?? null)]]} /></section><section className="ns-panel p-4"><h2 className="text-sm font-semibold">Observações da negociação</h2><p className="mt-3 whitespace-pre-wrap text-xs leading-5 text-[var(--ns-text-secondary)]">{preSale.negotiation_details || "Sem observações."}</p></section></div>
+          <aside className="ns-panel self-start p-4 xl:sticky xl:top-4"><h2 className="text-sm font-semibold">Situação e registro</h2><div className="mt-4"><PreSalesStatusSelect preSaleId={preSale.id} status={preSale.status} disabled={!canEdit} /></div><ReferenceFacts items={[["Criado por",formatUserName(creator)],["Data de abertura",formatDateTime(preSale.created_at)],["Última atualização",formatDateTime(preSale.updated_at)]]} /><h2 className="mt-5 border-t border-[var(--ns-border)] pt-4 text-sm font-semibold">Timeline e atividades</h2>{activityError ? <p className="mt-3 text-xs text-[var(--ns-danger)]">Histórico indisponível.</p> : activities.length ? <ol className="mt-4 space-y-4 border-l border-[var(--ns-border)] pl-4">{activities.map(event => <li key={event.id} className="relative text-xs"><span className="absolute -left-[21px] top-1 h-2 w-2 rounded-full bg-[var(--ns-primary)]" /><p className="font-semibold">{event.title}</p><p className="mt-1 text-[var(--ns-text-secondary)]">{event.actor_name || "Sistema"}</p><p className="mt-1 text-[10px] text-[var(--ns-text-secondary)]">{formatDateTime(event.created_at)}</p>{event.note && <p className="mt-2 whitespace-pre-wrap break-words text-[var(--ns-text-secondary)]">{event.note}</p>}</li>)}</ol> : <p className="mt-3 text-xs text-[var(--ns-text-secondary)]">Nenhuma atividade registrada para esta pré-venda.</p>}</aside>
+        </div>},
+        {label:"Dados e pagamentos",content:<div className="reference-detail-sections">        <DetailSection title="Cabecalho">
           <DetailItem
             label="Status"
             value={
@@ -549,13 +567,16 @@ export default async function PreVendaPage({ params, searchParams }: PreVendaPag
           errorMessage={queryParams.legalPaymentError ?? null}
         />
 
-        <ClientDocumentsSection
+</div>},
+        {label:"Documentos",content:<div>        <ClientDocumentsSection
           clientId={preSale.client_id}
           preSaleId={preSale.id}
           title="Anexos da operação"
           description="Documentos privados vinculados a esta pré-venda e ao cliente da operação."
         />
-      </div>
-    </>
-  );
+</div>}
+      ]} />
+    </div>
+  </>;
 }
+

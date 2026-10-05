@@ -1,11 +1,15 @@
-import { Edit, Eye, Plus } from "lucide-react";
+import { Edit, Eye, Plus, Files, CheckCircle2, FileText, ShieldCheck } from "lucide-react";
+import { ReferenceActions } from "@/components/newsec/reference-actions";
+import { ReferenceCollection } from "@/components/newsec/reference-collection";
+import { ReferenceFacts, ReferenceBadge } from "@/components/newsec/reference-ui";
+import { ManagementMetric } from "@/components/management/management-ui";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { DocumentTemplateActions } from "@/components/documents/document-template-actions";
 import { DocumentsNav } from "@/components/documents/documents-nav";
 import { PageHeader } from "@/components/layout/page-header";
 import { getCurrentUserContext } from "@/lib/auth/current-user";
-import { displayValue, formatDateTime } from "@/lib/clients/formatters";
+import { formatDateTime } from "@/lib/clients/formatters";
 import {
   getLegalWorkflowStage,
   legalWorkflowStages,
@@ -76,16 +80,18 @@ export default async function TemplatesPage({ searchParams }: TemplatesPageProps
     ? stagesData.map(mapLegalWorkflowStageRow)
     : legalWorkflowStages;
 
-  return (
-    <>
-      <PageHeader
-        title="Templates"
-        description="Modelos de contrato, ordem de serviço e documentos operacionais da empresa."
-      />
-      <div className="space-y-6 p-6">
-        <DocumentsNav />
 
-        <div className="flex flex-col gap-4 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+  return <>
+    <PageHeader title="Templates de documentos" description="Contratos e templates operacionais da empresa." />
+    <div className="reference-page space-y-4 p-4 sm:p-6"><DocumentsNav />
+      {error ? <p role="alert" className="text-sm text-[var(--ns-danger)]">{error.message}</p> : <>
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <ManagementMetric label="Templates carregados" value={templates.length} icon={Files} />
+        <ManagementMetric label="Templates ativos" value={templates.filter(t => t.is_active).length} icon={CheckCircle2} tone="success" />
+        <ManagementMetric label="Arquivos vinculados" value={templates.filter(t => t.original_pdf_path || t.original_docx_path).length} icon={FileText} />
+        <ManagementMetric label="Modelos padrão" value={templates.filter(t => t.is_default).length} icon={ShieldCheck} tone="warning" />
+      </div>
+      <details className="ns-panel p-3" open={Boolean(params.q || params.type || (params.active && params.active !== "all"))}><summary className="text-xs font-semibold text-[var(--ns-primary)]">Filtros avançados</summary><div className="pt-3">
           <form className="grid gap-3 md:grid-cols-[1fr_220px_180px_auto]">
             <input
               name="q"
@@ -121,139 +127,19 @@ export default async function TemplatesPage({ searchParams }: TemplatesPageProps
               Filtrar
             </button>
           </form>
-          <div>
-            <Link
-              href="/documentos/templates/novo"
-              className="inline-flex items-center justify-center gap-2 rounded-lg bg-teal-700 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-teal-800"
-            >
-              <Plus className="h-4 w-4" />
-              Novo template
-            </Link>
-          </div>
-        </div>
-
-        {error ? (
-          <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-            {error.message}
-          </div>
-        ) : (
-          <section className="rounded-lg border border-slate-200 bg-white shadow-sm">
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[980px] border-collapse text-left text-sm">
-                <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
-                  <tr>
-                    <th className="px-4 py-3 font-semibold">Nome</th>
-                    <th className="px-4 py-3 font-semibold">Tipo</th>
-                    <th className="px-4 py-3 font-semibold">Etapa jurídica</th>
-                    <th className="px-4 py-3 font-semibold">DOCX oficial</th>
-                    <th className="px-4 py-3 font-semibold">Ativo</th>
-                    <th className="px-4 py-3 font-semibold">Padrão</th>
-                    <th className="px-4 py-3 font-semibold">Atualizado em</th>
-                    <th className="px-4 py-3 font-semibold">Ações</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {templates.map((template) => (
-                    <tr key={template.id} className="transition hover:bg-slate-50">
-                      <td className="px-4 py-3">
-                        <p className="font-medium text-slate-900">
-                          {displayValue(template.name)}
-                        </p>
-                        {template.description ? (
-                          <p className="mt-1 text-xs text-slate-500">
-                            {template.description}
-                          </p>
-                        ) : null}
-                      </td>
-                      <td className="px-4 py-3 text-slate-700">
-                        {formatTemplateType(template.document_type)}
-                      </td>
-                      <td className="px-4 py-3 text-slate-700">
-                        {template.legal_stage_id || template.legal_stage
-                          ? getLegalWorkflowStage(
-                              template.legal_stage_id ?? template.legal_stage,
-                              workflowStages,
-                            ).shortLabel
-                          : "-"}
-                      </td>
-                      <td className="px-4 py-3">
-                        <span
-                          className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
-                            template.original_pdf_path || template.original_docx_path
-                              ? "bg-teal-50 text-teal-700"
-                              : "bg-amber-50 text-amber-700"
-                          }`}
-                        >
-                          {template.original_pdf_path
-                            ? "PDF vinculado"
-                            : template.original_docx_path
-                              ? "DOCX vinculado"
-                              : "Pendente"}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3">
-                        <span
-                          className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
-                            template.is_active
-                              ? "bg-teal-50 text-teal-700"
-                              : "bg-slate-100 text-slate-600"
-                          }`}
-                        >
-                          {template.is_active ? "Ativo" : "Inativo"}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3">
-                        <span
-                          className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
-                            template.is_default
-                              ? "bg-amber-50 text-amber-700"
-                              : "bg-slate-100 text-slate-600"
-                          }`}
-                        >
-                          {template.is_default ? "Padrão" : "Não"}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-slate-700">
-                        {formatDateTime(template.updated_at ?? template.created_at)}
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex flex-wrap gap-2">
-                          <Link
-                            href={`/documentos/templates/${template.id}`}
-                            className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-                          >
-                            <Eye className="h-4 w-4" />
-                            Ver
-                          </Link>
-                          <Link
-                            href={`/documentos/templates/${template.id}/editar`}
-                            className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-                          >
-                            <Edit className="h-4 w-4" />
-                            Editar
-                          </Link>
-                          <DocumentTemplateActions
-                            templateId={template.id}
-                            isActive={template.is_active}
-                            isDefault={template.is_default}
-                          />
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                  {!templates.length ? (
-                    <tr>
-                      <td className="px-4 py-6 text-center text-slate-500" colSpan={8}>
-                        Nenhum template encontrado.
-                      </td>
-                    </tr>
-                  ) : null}
-                </tbody>
-              </table>
-            </div>
-          </section>
-        )}
-      </div>
-    </>
-  );
+          </div></details>
+      <ReferenceCollection title="Contratos e templates" detailTitle="Detalhes do template" actions={<Link href="/documentos/templates/novo" className="inline-flex items-center gap-2 rounded-md bg-[var(--ns-primary)] px-3 py-2 text-xs font-semibold text-[var(--ns-primary-foreground)]"><Plus className="h-4 w-4" />Novo template</Link>} columns={["Nome", "Tipo", "Etapa jurídica", "Arquivo", "Status", "Última edição", "Ações"]} rows={templates.map(template => {
+        const typeLabel = formatTemplateType(template.document_type);
+        const stage = template.legal_stage_id || template.legal_stage ? getLegalWorkflowStage(template.legal_stage_id ?? template.legal_stage, workflowStages).shortLabel : "-";
+        const fileLabel = template.original_pdf_path ? "PDF vinculado" : template.original_docx_path ? "DOCX vinculado" : "HTML";
+        const links = <div key="actions" className="flex flex-wrap gap-2"><Link href={`/documentos/templates/${template.id}`} title="Visualizar template" className="text-[var(--ns-primary)]"><Eye className="h-4 w-4" /></Link><Link href={`/documentos/templates/${template.id}/editar`} title="Editar template" className="text-[var(--ns-primary)]"><Edit className="h-4 w-4" /></Link><DocumentTemplateActions templateId={template.id} isActive={template.is_active} isDefault={template.is_default} /></div>;
+        return { id: template.id, title: template.name, search: [template.name, template.description, typeLabel, stage].join(" "), type: typeLabel, status: template.is_active ? "Ativo" : "Inativo",
+          cells: [<div key="name"><p className="line-clamp-2 font-semibold">{template.name}</p><p className="mt-1 line-clamp-1 text-[10px] text-[var(--ns-text-secondary)]">{template.description}</p></div>, typeLabel, stage, fileLabel, <ReferenceBadge key="status" tone={template.is_active ? "success" : "warning"}>{template.is_active ? "Ativo" : "Inativo"}</ReferenceBadge>, formatDateTime(template.updated_at ?? template.created_at), <ReferenceActions key="actions">{links}</ReferenceActions>],
+          detail: <div key={template.id} className="space-y-4"><ReferenceBadge tone={template.is_active ? "success" : "warning"}>{template.is_active ? "Ativo" : "Inativo"}</ReferenceBadge><p className="text-xs text-[var(--ns-text-secondary)]">{template.description}</p><ReferenceFacts items={[["Tipo", typeLabel], ["Etapa jurídica", stage], ["Arquivo", fileLabel], ["Última edição", formatDateTime(template.updated_at ?? template.created_at)], ["Modelo padrão", template.is_default ? "Sim" : "Não"]]} /><Link href={`/documentos/templates/${template.id}/editar`} className="inline-flex gap-2 rounded-md bg-[var(--ns-primary)] px-4 py-2 text-xs font-semibold text-[var(--ns-primary-foreground)]"><Edit className="h-4 w-4" />Editar</Link>{links}</div>
+        };
+      })} />
+      </>}
+    </div>
+  </>;
 }
+

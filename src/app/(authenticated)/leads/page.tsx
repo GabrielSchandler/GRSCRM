@@ -5,6 +5,7 @@ import { getCurrentUserContext } from "@/lib/auth/current-user";
 import { displayValue, formatDateTime } from "@/lib/clients/formatters";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { resolveUserDisplayName } from "@/lib/users/account";
+import { LeadSelection, LeadSelectionCheckbox, SelectAllLeadsCheckbox } from "@/components/leads/lead-selection";
 import {
   assignSelectedLeadsAction,
   autoDistributeLeadsAction,
@@ -272,8 +273,8 @@ export default async function LeadsPage({ searchParams }: LeadsPageProps) {
           </div>
         </section>
 
-        <form className="grid gap-6 xl:grid-cols-[1fr_360px]">
-          <section className="rounded-lg border border-slate-200 bg-white shadow-sm">
+        <form className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
+          <section className="min-w-0 rounded-lg border border-slate-200 bg-white shadow-sm">
             <div className="border-b border-slate-200 p-5">
               <h2 className="text-base font-semibold text-slate-950">
                 Leads novos
@@ -285,11 +286,12 @@ export default async function LeadsPage({ searchParams }: LeadsPageProps) {
             </div>
 
             {newLeads.length ? (
+              <LeadSelection leadIds={newLeads.map(lead => lead.id)}>
               <div className="overflow-x-auto">
                 <table className="w-full min-w-[920px] border-collapse text-left text-sm">
                   <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
                     <tr>
-                      <th className="w-12 px-4 py-3">Sel.</th>
+                      <th className="w-12 px-4 py-3"><SelectAllLeadsCheckbox /></th>
                       <th className="px-4 py-3">Lead</th>
                       <th className="px-4 py-3">Contato</th>
                       <th className="px-4 py-3">Campanha</th>
@@ -301,12 +303,7 @@ export default async function LeadsPage({ searchParams }: LeadsPageProps) {
                     {newLeads.map((lead) => (
                       <tr key={lead.id} className="align-top transition hover:bg-slate-50">
                         <td className="px-4 py-4">
-                          <input
-                            type="checkbox"
-                            name="lead_id"
-                            value={lead.id}
-                            className="h-4 w-4 rounded border-slate-300 text-teal-700 focus:ring-teal-600"
-                          />
+                          <LeadSelectionCheckbox id={lead.id} name={lead.full_name} />
                         </td>
                         <td className="px-4 py-4">
                           <p className="font-semibold text-slate-950">
@@ -344,6 +341,7 @@ export default async function LeadsPage({ searchParams }: LeadsPageProps) {
                   </tbody>
                 </table>
               </div>
+              </LeadSelection>
             ) : (
               <div className="p-6">
                 <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 px-4 py-8 text-center text-sm text-slate-600">

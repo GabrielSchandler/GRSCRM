@@ -105,12 +105,12 @@ function SummaryMetric({
   detail?: string;
 }) {
   return (
-    <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
-      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+    <div className="rounded-[8px] border border-[var(--ns-border)] bg-[var(--ns-surface-alt)] px-4 py-3">
+      <p className="text-xs font-semibold uppercase tracking-wide text-[var(--ns-muted)]">
         {label}
       </p>
-      <div className="mt-1 text-sm font-semibold text-slate-950">{value}</div>
-      {detail ? <p className="mt-1 text-xs text-slate-500">{detail}</p> : null}
+      <div className="mt-1 text-sm font-semibold text-[var(--ns-text)]">{value}</div>
+      {detail ? <p className="mt-1 text-xs text-[var(--ns-muted)]">{detail}</p> : null}
     </div>
   );
 }
@@ -326,79 +326,78 @@ export default async function ClientePage({
       <div className="space-y-6 p-6">
         {successMessage ? <ClientToast message={successMessage} /> : null}
 
-        <section className="rounded-[12px] border border-[#DDE2EC] bg-white px-6 py-5">
+        <section className="rounded-[12px] border border-[var(--ns-border)] bg-[var(--ns-surface)] px-6 py-5">
           <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex min-w-0 items-center gap-4">
               <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-[#5267F5] text-base font-semibold text-white">
                 {client.full_name.slice(0, 2).toUpperCase()}
               </span>
               <div className="min-w-0">
-                <h1 className="truncate text-2xl font-semibold text-[#11182E]">{client.full_name}</h1>
-                <p className="mt-1 truncate text-sm text-[#69738A]">
+                <h1 className="truncate text-2xl font-semibold text-[var(--ns-text)]">{client.full_name}</h1>
+                <p className="mt-1 truncate text-sm text-[var(--ns-muted)]">
                   CPF {displayCpf(client.cpf)} · {displayPhone(client.phone_mobile)} · {displayValue(client.email)}
                 </p>
                 <div className="mt-3"><ClientStatusBadge client={client} /></div>
               </div>
             </div>
-            <div className="text-sm text-[#69738A] lg:text-right">
-              <p className="text-xs font-semibold uppercase tracking-wide">Consultor</p>
-              <p className="mt-1 font-semibold text-[#11182E]">
-                {displayValue(resolveUserDisplayName(commercialConsultantProfile, ""))}
-              </p>
+            <div className="flex flex-col gap-3 lg:items-end">
+              <div className="text-sm text-[var(--ns-muted)] lg:text-right">
+                <p className="text-xs font-semibold uppercase tracking-wide">Consultor</p>
+                <p className="mt-1 font-semibold text-[var(--ns-text)]">
+                  {displayValue(resolveUserDisplayName(commercialConsultantProfile, ""))}
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2 lg:justify-end">
+                {isDeletedClient(client) ? null : (
+                  <Link
+                    href={`/clientes/${client.id}/editar`}
+                    className="inline-flex items-center gap-2 rounded-[8px] bg-[var(--ns-primary)] px-4 py-2.5 text-sm font-semibold text-white transition hover:opacity-90"
+                  >
+                    <Edit className="h-4 w-4" />
+                    Editar
+                  </Link>
+                )}
+                <Link
+                  href="/clientes"
+                  className="rounded-[8px] border border-[var(--ns-border)] bg-[var(--ns-surface)] px-4 py-2.5 text-sm font-semibold text-[var(--ns-text)] transition hover:bg-[var(--ns-surface-alt)]"
+                >
+                  Voltar
+                </Link>
+                <WhatsAppLink phone={client.phone_mobile} />
+                {!isDeletedClient(client) && canUseLegalEmail ? (
+                  <SendClientEmailModal
+                    clientId={client.id}
+                    preSaleId={primaryEmailPreSale?.id ?? null}
+                    clientEmail={client.email}
+                    bankName={emailFinancialCase?.financer_name ?? null}
+                    templates={emailTemplates}
+                    documents={clientEmailDocuments}
+                    variables={{
+                      nome_cliente: client.full_name,
+                      cpf: client.cpf,
+                      email_cliente: client.email ?? "Não informado",
+                      telefone_cliente: client.phone_mobile,
+                      banco: emailFinancialCase?.financer_name ?? "Não informado",
+                      financeira: emailFinancialCase?.financer_name ?? "Não informado",
+                      financeira_razao_social:
+                        emailFinancialCase?.financer_legal_name ?? "Não informado",
+                      financeira_cnpj: emailFinancialCase?.financer_cnpj ?? "Não informado",
+                      numero_contrato: primaryEmailPreSale?.tracking_protocol ?? "Não informado",
+                      numero_protocolo: primaryEmailPreSale?.tracking_protocol ?? "Não informado",
+                      protocolo: primaryEmailPreSale?.tracking_protocol ?? "Não informado",
+                      numero_contrato_financiamento:
+                        emailFinancialCase?.contract_number ?? "Não informado",
+                    }}
+                  />
+                ) : null}
+                {!isDeletedClient(client) ? <DeleteClientButton clientId={client.id} /> : null}
+                {role === "admin" && isDeletedClient(client) ? (
+                  <ReactivateClientButton clientId={client.id} />
+                ) : null}
+              </div>
             </div>
           </div>
         </section>
-
-        <div className="flex flex-wrap justify-end gap-3">
-          {isDeletedClient(client) ? null : (
-            <Link
-              href={`/clientes/${client.id}/editar`}
-              className="inline-flex items-center gap-2 rounded-[10px] bg-[#5267F5] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#4053DE]"
-            >
-              <Edit className="h-4 w-4" />
-              Editar
-            </Link>
-          )}
-          <Link
-            href="/clientes"
-            className="rounded-[10px] border border-[#DDE2EC] bg-white px-4 py-2.5 text-sm font-semibold text-[#11182E] transition hover:bg-[#EEF1F8]"
-          >
-            Voltar para clientes
-          </Link>
-          <WhatsAppLink phone={client.phone_mobile} />
-          {!isDeletedClient(client) && canUseLegalEmail ? (
-            <SendClientEmailModal
-              clientId={client.id}
-              preSaleId={primaryEmailPreSale?.id ?? null}
-              clientEmail={client.email}
-              bankName={emailFinancialCase?.financer_name ?? null}
-              templates={emailTemplates}
-              documents={clientEmailDocuments}
-              variables={{
-                nome_cliente: client.full_name,
-                cpf: client.cpf,
-                email_cliente: client.email ?? "Não informado",
-                telefone_cliente: client.phone_mobile,
-                banco: emailFinancialCase?.financer_name ?? "Não informado",
-                financeira: emailFinancialCase?.financer_name ?? "Não informado",
-                financeira_razao_social:
-                  emailFinancialCase?.financer_legal_name ?? "Não informado",
-                financeira_cnpj: emailFinancialCase?.financer_cnpj ?? "Não informado",
-                numero_contrato: primaryEmailPreSale?.tracking_protocol ?? "Não informado",
-                numero_protocolo: primaryEmailPreSale?.tracking_protocol ?? "Não informado",
-                protocolo: primaryEmailPreSale?.tracking_protocol ?? "Não informado",
-                numero_contrato_financiamento:
-                  emailFinancialCase?.contract_number ?? "Não informado",
-              }}
-            />
-          ) : null}
-          {!isDeletedClient(client) ? (
-            <DeleteClientButton clientId={client.id} />
-          ) : null}
-          {role === "admin" && isDeletedClient(client) ? (
-            <ReactivateClientButton clientId={client.id} />
-          ) : null}
-        </div>
 
         <ClientDetailTabs
           tabs={[
@@ -439,19 +438,19 @@ export default async function ClientePage({
         >
           <ClientTabPanel id="resumo">
             <section className="grid gap-4 xl:grid-cols-[minmax(0,1.55fr)_minmax(320px,0.75fr)]">
-              <div className="rounded-[12px] border border-[#DDE2EC] bg-white p-6 shadow-none">
+              <div className="rounded-[12px] border border-[var(--ns-border)] bg-[var(--ns-surface)] p-6 shadow-none">
               <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
                 <div>
                   <ClientStatusBadge client={client} />
-                  <h2 className="mt-4 text-xl font-semibold text-slate-950">
-                    {client.full_name}
+                  <h2 className="mt-4 text-xl font-semibold text-[var(--ns-text)]">
+                    Visão geral
                   </h2>
-                  <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
+                  <p className="mt-2 max-w-3xl text-sm leading-6 text-[var(--ns-muted)]">
                     Centralize a leitura principal do cliente antes de acessar dados,
                     documentos, pré-vendas ou histórico completo.
                   </p>
                 </div>
-                <div className="rounded-lg border border-teal-100 bg-teal-50 px-4 py-3 text-sm text-teal-900">
+                <div className="rounded-[8px] border border-[var(--ns-border)] bg-[color-mix(in_srgb,var(--ns-primary)_8%,var(--ns-surface))] px-4 py-3 text-sm text-[var(--ns-text)]">
                   <span className="font-semibold">Ultima atualizacao:</span>{" "}
                   {formatDateTime(client.updated_at)}
                 </div>
@@ -511,27 +510,27 @@ export default async function ClientePage({
                 />
               </div>
 
-              <div className="mt-6 rounded-lg border border-slate-200 bg-slate-50 p-4">
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <div className="mt-6 rounded-[8px] border border-[var(--ns-border)] bg-[var(--ns-surface-alt)] p-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-[var(--ns-muted)]">
                   Observações
                 </p>
-                <p className="mt-2 whitespace-pre-line text-sm leading-6 text-slate-800">
+                <p className="mt-2 whitespace-pre-line text-sm leading-6 text-[var(--ns-text)]">
                   {displayValue(client.notes)}
                 </p>
               </div>
               </div>
-              <aside className="rounded-[12px] border border-[#DDE2EC] bg-white p-6 shadow-none">
-                <h2 className="text-lg font-semibold text-[#11182E]">Linha do tempo</h2>
-                <p className="mt-1 text-sm text-[#69738A]">Tudo que aconteceu com este cliente</p>
+              <aside className="rounded-[12px] border border-[var(--ns-border)] bg-[var(--ns-surface)] p-6 shadow-none xl:sticky xl:top-4 xl:self-start">
+                <h2 className="text-lg font-semibold text-[var(--ns-text)]">Linha do tempo</h2>
+                <p className="mt-1 text-sm text-[var(--ns-muted)]">Tudo que aconteceu com este cliente</p>
                 <div className="mt-5 space-y-4">
                   {timelineEvents.slice(0, 5).map((event) => (
-                    <div key={event.id} className="border-l-2 border-[#C9D0FF] pl-4">
-                      <p className="text-xs font-semibold text-[#69738A]">{formatDateTime(event.created_at)}</p>
-                      <p className="mt-1 text-sm font-semibold text-[#11182E]">{event.title}</p>
-                      {event.note ? <p className="mt-1 text-sm text-[#69738A]">{event.note}</p> : null}
+                    <div key={event.id} className="border-l-2 border-[color-mix(in_srgb,var(--ns-primary)_35%,var(--ns-border))] pl-4">
+                      <p className="text-xs font-semibold text-[var(--ns-muted)]">{formatDateTime(event.created_at)}</p>
+                      <p className="mt-1 text-sm font-semibold text-[var(--ns-text)]">{event.title}</p>
+                      {event.note ? <p className="mt-1 text-sm text-[var(--ns-muted)]">{event.note}</p> : null}
                     </div>
                   ))}
-                  {!timelineEvents.length ? <p className="text-sm text-[#69738A]">Nenhuma movimentação registrada.</p> : null}
+                  {!timelineEvents.length ? <p className="text-sm text-[var(--ns-muted)]">Nenhuma movimentação registrada.</p> : null}
                 </div>
               </aside>
             </section>

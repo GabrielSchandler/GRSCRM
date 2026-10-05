@@ -1,3 +1,5 @@
+import { CalculationDetailSummary } from "@/components/calculations/calculation-detail-summary";
+import { RecordTabs } from "@/components/newsec/record-tabs";
 import { Edit } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -99,14 +101,11 @@ export default async function CalculoPage({
           : "Simulação atualizada com sucesso."
         : null;
 
-  return (
-    <>
-      <PageHeader
-        title={calculation.client_name || "Não informado"}
-        description="Relatório operacional da simulação revisional pronto para consulta, ajuste e emissão do PDF."
-      />
-      <div className="space-y-6 p-6">
-        {successMessage ? <ClientToast message={successMessage} /> : null}
+
+  return <>
+    <PageHeader title="Detalhe da simulação" description="Resultados, parâmetros e documentos da análise revisional." />
+    <div className="reference-page space-y-4 p-4 sm:p-6">
+              {successMessage ? <ClientToast message={successMessage} /> : null}
         {queryParams.artifacts === "failed" ? (
           <div className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
             A simulação foi salva, mas os arquivos não puderam ser gerados
@@ -115,40 +114,22 @@ export default async function CalculoPage({
           </div>
         ) : null}
 
-        <div className="flex flex-wrap gap-3">
-          <Link
-            href={`/calculos/${calculation.id}/editar`}
-            className="inline-flex items-center gap-2 rounded-lg bg-teal-700 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-teal-800"
-          >
-            <Edit className="h-4 w-4" />
-            Editar
-          </Link>
-          <Link
-            href="/calculos"
-            className="rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-          >
-            Voltar para simulações
-          </Link>
-          <CalculationDeleteButton calculationId={calculation.id} />
-          {calculation.client_id ? (
-            <Link
-              href={`/clientes/${calculation.client_id}`}
-              className="rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-            >
-              Abrir cliente
-            </Link>
-          ) : null}
-          {calculation.pre_sale_id ? (
-            <Link
-              href={`/pre-vendas/${calculation.pre_sale_id}`}
-              className="rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-            >
-              Abrir pré-venda
-            </Link>
-          ) : null}
-        </div>
 
-        <DetailSection title="Resumo da simulação">
+      <section className="ns-panel flex flex-wrap items-center justify-between gap-4 p-4"><div><h2 className="text-lg font-semibold">{calculation.client_name || "Simulação"}</h2><p className="mt-1 text-xs text-[var(--ns-text-secondary)]">{formatCpfDigits(calculation.client_cpf)} · {calculation.financial_institution ?? "Financeira não informada"} · {calculation.simulation_type ? formatPreSaleType(calculation.simulation_type) : "Tipo não informado"}</p></div><div className="space-y-1"><CalculationStatusBadge status={calculation.status} /><p className="text-xs text-[var(--ns-text-secondary)]">{formatCalculationDateTime(calculation.created_at)}</p></div></section>
+      <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_300px]"><div className="min-w-0"><RecordTabs panels={[
+        {label:"Resumo",content:<div className="space-y-4"><CalculationDetailSummary calculation={calculation} />
+
+        <section className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+          <h2 className="text-base font-semibold text-slate-950">Observação final</h2>
+          <p className="mt-3 text-sm leading-6 text-slate-700">
+            Todos os valores informados nesta simulação foram baseados em taxas
+            médias utilizadas pelo mercado na categoria de financiamentos
+            bancários. Os verdadeiros valores serão revogados e decididos
+            posteriormente a prestação de serviços.
+          </p>
+        </section>
+</div>},
+        {label:"Parâmetros",content:<div className="reference-detail-sections">        <DetailSection title="Resumo da simulação">
           <DetailItem label="Status" value={<CalculationStatusBadge status={calculation.status} />} />
           <DetailItem
             label="Tipo da simulação"
@@ -188,7 +169,8 @@ export default async function CalculoPage({
           ) : null}
         </DetailSection>
 
-        <DetailSection
+</div>},
+        {label:"Comparativo",content:<div className="space-y-4">        <DetailSection
           title="Resultado da simulação"
           description="Comparativo entre o cenário atual do financiamento e a revisão estimada pela metodologia da planilha."
         >
@@ -268,7 +250,8 @@ export default async function CalculoPage({
           />
         </DetailSection>
 
-        <section className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+</div>},
+        {label:"PDF",content:<div>        <section className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
           <h2 className="text-base font-semibold text-slate-950">
             Arquivos da simulação
           </h2>
@@ -282,18 +265,42 @@ export default async function CalculoPage({
               hasPdf={Boolean(calculation.pdf_storage_path)}
             />
           </div>
-        </section>
+        </section></div>}
+      ]} /></div><aside className="ns-panel self-start space-y-4 p-4 xl:sticky xl:top-4 xl:max-h-[calc(100dvh-2rem)] xl:overflow-y-auto"><h2 className="text-sm font-semibold">Ações</h2>        <div className="flex flex-wrap gap-3">
+          <Link
+            href={`/calculos/${calculation.id}/editar`}
+            className="inline-flex items-center gap-2 rounded-lg bg-teal-700 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-teal-800"
+          >
+            <Edit className="h-4 w-4" />
+            Editar
+          </Link>
+          <Link
+            href="/calculos"
+            className="rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+          >
+            Voltar para simulações
+          </Link>
+          <CalculationDeleteButton calculationId={calculation.id} />
+          {calculation.client_id ? (
+            <Link
+              href={`/clientes/${calculation.client_id}`}
+              className="rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+            >
+              Abrir cliente
+            </Link>
+          ) : null}
+          {calculation.pre_sale_id ? (
+            <Link
+              href={`/pre-vendas/${calculation.pre_sale_id}`}
+              className="rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+            >
+              Abrir pré-venda
+            </Link>
+          ) : null}
+        </div>
 
-        <section className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
-          <h2 className="text-base font-semibold text-slate-950">Observação final</h2>
-          <p className="mt-3 text-sm leading-6 text-slate-700">
-            Todos os valores informados nesta simulação foram baseados em taxas
-            médias utilizadas pelo mercado na categoria de financiamentos
-            bancários. Os verdadeiros valores serão revogados e decididos
-            posteriormente a prestação de serviços.
-          </p>
-        </section>
-      </div>
-    </>
-  );
+<div className="border-t border-[var(--ns-border)] pt-4"><CalculationPdfActions calculationId={calculation.id} hasPdf={Boolean(calculation.pdf_storage_path)} variant="compact" /></div><div className="border-t border-[var(--ns-border)] pt-4"><h3 className="text-xs font-semibold">Observações</h3><p className="mt-2 whitespace-pre-wrap text-xs leading-5 text-[var(--ns-text-secondary)]">{calculation.notes || "Sem observações."}</p></div></aside></div>
+    </div>
+  </>;
 }
+

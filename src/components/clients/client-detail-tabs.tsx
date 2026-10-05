@@ -62,15 +62,17 @@ export function ClientDetailTabs({ tabs, children }: ClientDetailTabsProps) {
                 onClick={() => selectTab(tab.id)}
                 className={`inline-flex items-center gap-2 rounded-[10px] border px-5 py-3 text-sm font-semibold transition ${
                   isActive
-                    ? "border-[#5267F5] bg-[#5267F5] text-white"
-                    : "border-[#DDE2EC] bg-white text-[#11182E] hover:bg-[#EEF1F8]"
+                    ? "border-[var(--ns-primary)] bg-[var(--ns-primary)] text-white"
+                    : "border-[var(--ns-border)] bg-[var(--ns-surface)] text-[var(--ns-text)] hover:bg-[var(--ns-surface-alt)]"
                 }`}
               >
                 <span>{tab.label}</span>
                 {typeof tab.count === "number" ? (
                   <span
                     className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
-                      isActive ? "bg-white/20 text-white" : "bg-[#EEF0FF] text-[#5267F5]"
+                      isActive
+                        ? "bg-white/20 text-white"
+                        : "bg-[color-mix(in_srgb,var(--ns-primary)_10%,var(--ns-surface))] text-[var(--ns-primary)]"
                     }`}
                   >
                     {tab.count}

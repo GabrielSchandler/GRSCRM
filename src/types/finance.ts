@@ -37,6 +37,9 @@ export type FinanceTransaction = {
   source_hash: string | null;
   notes: string | null;
   created_at: string;
+  created_by?: string | null;
+  updated_by?: string | null;
+  updated_at?: string | null;
 };
 
 export type FinanceSale = {

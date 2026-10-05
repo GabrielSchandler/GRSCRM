@@ -99,7 +99,7 @@ export default async function EmailTemplatesPage({
   return (
     <>
       <PageHeader
-        title="Templates de email"
+        title="Gestão"
         description="Cadastre os assuntos e corpos usados pelo jurídico nos emails para clientes e bancos."
       />
       <div className="space-y-6 p-6">

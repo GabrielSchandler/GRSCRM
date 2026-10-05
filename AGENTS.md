@@ -95,6 +95,10 @@ deploy de producao.
 
 ### Parcial ou dependente do ambiente
 
+- presenca online do dashboard depende de `docs/sql/user-presence.sql`;
+  tabela confirmada ausente em 05/10/2026. Exibe indisponivel ate aplicar.
+  Detalhes e rollback em `docs/USER_PRESENCE.md`;
+
 - os scripts em `docs/sql/` existem, mas sua aplicacao no Supabase de cada
   ambiente e **A CONFIRMAR**;
 - o fluxo de aprovacao do portal foi implementado e testado em unidade, mas a
@@ -362,6 +366,20 @@ simulacao e sao gerados juntos ao salvar/regenerar.
 **Estado:** ativa.
 
 ## 13. Ultimas alteracoes
+
+- 05/10/2026: Financeiro ganhou visao geral Newsec claro/escuro com fluxo de
+  caixa real, filtros e painel lateral sticky para consulta/cadastro/edicao.
+  Rotinas originais preservadas em Lancamentos. Validacao: 32 testes, lint,
+  typecheck e navegador desktop/mobile. Detalhes e limites no handoff.
+
+- 05/10/2026: Equipe mostra previa no hover/foco com painel sticky desktop;
+  distribuicao de leads ganhou checkbox Todos e estado parcial. Acoes de
+  distribuicao preservadas e nao executadas no teste.
+
+- 05/10/2026: dashboard Gestao com contas ativas separadas de presenca online,
+  atividades traduzidas com autor/data e criacoes do dia vs ontem. SQL de
+  presenca preparado, ainda nao aplicado. Integrações removidas apenas do
+  dashboard, nao dos servicos. Contexto em `docs/USER_PRESENCE.md`.
 
 ### Ultima atualizacao funcional confirmada
 

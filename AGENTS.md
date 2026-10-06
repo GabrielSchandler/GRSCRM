@@ -76,6 +76,10 @@ deploy de producao.
 
 ### Implementado no codigo
 
+- dashboards Comercial e Gestao revisados em claro/escuro em 06/10/2026;
+  corrigidos valores semanticos escuros, hover de cobrancas e indicador longo.
+  Dados/calculos preservados; verificacoes e limites em docs/NEWSEC_REFERENCE_BLOCKS.md.
+
 - login Supabase, sessao SSR, troca obrigatoria de senha e conta inativa;
 - isolamento por `company_id`, papeis `admin`, `manager`, `seller`, areas
   comercial/juridica e operador da plataforma;

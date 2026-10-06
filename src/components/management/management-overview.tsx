@@ -45,7 +45,7 @@ export async function ManagementOverview() {
 
   return <>
     <PageHeader title="Gestão" description="Central de comando da empresa e das áreas administrativas." />
-    <div className="management-page space-y-4 p-4 sm:p-6 lg:px-9">
+    <div className="management-page dashboard-contrast space-y-4 p-4 sm:p-6 lg:px-9">
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <ManagementMetric label="Aprovações pendentes" value={pending ?? unavailable} icon={Clock3} tone="danger" detail="Acompanhamentos e documentos" />
         <OnlineUsersMetric key={companyId} activeCount={active} />

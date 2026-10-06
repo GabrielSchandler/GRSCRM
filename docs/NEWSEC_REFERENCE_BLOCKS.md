@@ -49,6 +49,21 @@ pixel a pixel nem implementacao de funcionalidades ficticias para preencher a te
 
 ## Continuidade
 
+### Contraste dos dashboards (06/10/2026)
+
+- Comercial: valores semanticos legiveis no escuro, icones/badges sem fundos
+  claros excessivos e hover discreto nas cobrancas. Dados e calculos preservados.
+- Gestao: abas claras com contraste maior; valores longos nos indicadores usam
+  tamanho menor para evitar quebra no meio de Indisponivel.
+- Tokens claros ajustados somente no main dos dashboards, sem trocar a paleta
+  global. Nenhum indicador, numero ou registro ficticio adicionado.
+- Conferencia visual de topo e parte inferior em ambos os temas com dados reais.
+  Medicao DOM de contraste dos textos renderizados (RGB/OKLCH, composicao alpha)
+  sem casos abaixo de 4.5:1 para texto comum ou 3:1 para texto grande. Nao e uma
+  auditoria completa de acessibilidade nem cobre registros ausentes no periodo.
+- Capturas locais privadas em outputs/dashboard-contrast-qa, fora do commit.
+- typecheck --incremental false, lint e 51 testes aprovados.
+
 ### Refinamento e master (05/10/2026)
 
 - Tabelas mais compactas, destaque escuro preservado e fatos laterais mais curtos.

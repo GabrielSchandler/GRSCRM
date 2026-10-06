@@ -477,6 +477,20 @@ input:not(.ns-shell *) {
   border-color: var(--ns-border);
   background: var(--ns-surface);
 }
+/* Dashboard text needs enough contrast on both neutral and semantic surfaces. */
+.ns-shell[data-theme="light"] main:has(.dashboard-contrast) {
+  --ns-primary: #4659D9;
+  --ns-text-secondary: #606B80;
+}
+.ns-shell[data-theme="dark"] .commercial-dashboard :is(.text-emerald-950,.text-emerald-700) { color: var(--ns-success); }
+.ns-shell[data-theme="dark"] .commercial-dashboard :is(.text-amber-950,.text-amber-700) { color: var(--ns-warning); }
+.ns-shell[data-theme="dark"] .commercial-dashboard :is(.text-red-950,.text-red-700) { color: var(--ns-danger); }
+.ns-shell[data-theme="dark"] .commercial-dashboard :is(.text-teal-700,.hover\:text-teal-700:hover) { color: var(--ns-primary); }
+.ns-shell[data-theme="dark"] .commercial-dashboard .bg-emerald-100 { background: color-mix(in srgb,var(--ns-success) 16%,var(--ns-surface)); }
+.ns-shell[data-theme="dark"] .commercial-dashboard .bg-amber-100 { background: color-mix(in srgb,var(--ns-warning) 16%,var(--ns-surface)); }
+.ns-shell[data-theme="dark"] .commercial-dashboard .bg-red-100 { background: color-mix(in srgb,var(--ns-danger) 16%,var(--ns-surface)); }
+.ns-shell[data-theme="dark"] .commercial-dashboard :is(.border-emerald-200,.border-amber-200,.border-red-200) { border-color: var(--ns-border); }
+.commercial-dashboard :is(.bg-teal-700,.hover\:bg-teal-800:hover) { color: var(--ns-primary-foreground); }
 .management-page, .management-scope { color: var(--ns-text); }
 .management-scope .tracking-wide { letter-spacing: 0; }
 .ns-shell[data-theme="dark"] .management-scope :is(.text-teal-900,.text-teal-950,.text-sky-900,.text-indigo-900) { color: var(--ns-text); }

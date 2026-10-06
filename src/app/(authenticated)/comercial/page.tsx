@@ -509,7 +509,7 @@ export default async function ComercialDashboardPage() {
         title="Painel comercial"
         description="Pagamentos pagos no mês, meta, comissão e cobranças que precisam de acompanhamento."
       />
-      <div className="space-y-6 p-6">
+      <div className="commercial-dashboard dashboard-contrast space-y-6 p-6">
         {preSalesError ? (
           <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
             {preSalesError.message}
@@ -712,7 +712,7 @@ export default async function ComercialDashboardPage() {
                   <Link
                     key={payment.id ?? `${payment.preSale.id}-${payment.installment_number}`}
                     href={`/clientes/${payment.preSale.client_id}`}
-                    className="block p-5 transition hover:bg-teal-50/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-teal-600"
+                    className="block p-5 transition hover:bg-[var(--ns-surface-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--ns-primary)]"
                     aria-label={`Abrir cadastro de ${payment.client?.full_name ?? "cliente sem nome"}`}
                   >
                     <div className="flex items-start justify-between gap-3">
